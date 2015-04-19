@@ -1,0 +1,64 @@
+# Buld script for any simple project with a separate src, include and bin directories
+import os, re
+
+AddOption('--tst', dest='deb', action='store_true', help='Compiles in debug mode')
+AddOption('--opt', dest='opt', action='store_true', help='Compiles with all optimizations')
+
+####################### ENVIRONMENT SETUP #########################################################
+
+src_dir = 'src'
+tst_dir = 'tst'
+include_dir = 'include'
+bin_prefix = 'bin'
+exe_name = 'project'
+test_name = 'test_suite'
+
+env = Environment()
+# Fix to get compiler color output
+env['ENV']['TERM'] = os.environ['TERM']
+env.Decider('timestamp-newer')
+env.SetOption('num_jobs', 3)
+
+env['CXX'] = 'clang++'
+env['CPPPATH'] = include_dir
+env['CXXFLAGS'] = ['-Wall', '-Werror', '-std=c++11']
+env['LIBS'] = ['boost_regex']
+
+if (GetOption('deb')):
+  bin_dir = bin_prefix + '/debug'
+  env.Append( CXXFLAGS = ['-g', '-O0'] )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=4', '-D__LEVEL_ASSERT__=2'] )
+elif (GetOption('opt')):  
+  #env['LINK'] = 'clang++'
+  #env['LINKFLAGS'] = ['-O3', '-mtune=native', '-march=native']
+  #bin_dir = bin_prefix + '/optim'
+  #env.Append( CXXFLAGS = ['-O3', '-emit-llvm'] )
+  #env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=3', '-D__LEVEL_ASSERT__=0', '-D__PERF_STATS__=1'] )
+  bin_dir = bin_prefix + '/optim'
+  env.Append( CXXFLAGS = '-O3' )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=3', '-D__LEVEL_ASSERT__=0', '-D__PERF_STATS__=1'] )
+else:  
+  bin_dir = bin_prefix + '/release'
+  env.Append( CXXFLAGS = '-O2' )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=3', '-D__LEVEL_ASSERT__=1', '-D__PERF_STATS__=2'] )
+
+env.VariantDir(bin_dir, src_dir, duplicate=False)
+
+####################### BUILD STEPS ###############################################################
+
+env.Command('stl_solver', 'stl_solution/nurikabe.cpp', 'g++ -std=c++11 -lboost_regex -O3 -o $TARGET $SOURCES')
+objects = env.Object( Glob(bin_dir + "/*.cpp") )
+test_obj = env.Object( Glob("%s/%s/*.cpp" % (bin_dir, tst_dir)) )
+
+#if (not GetOption('opt')):  
+env.Program(exe_name, objects )
+env.Program(test_name, test_obj + [o for o in objects if ( not re.match(".*/main.o$", str(o)) )] )
+#else:
+#  lib_proj =     env.Command( bin_dir+'/'+exe_name+'.bc',     objects, "llvm-link -o $TARGET $SOURCES" )
+#  lib_opt_proj = env.Command( bin_dir+'/'+exe_name+'_opt.bc', lib_proj, "opt -std-compile-opts -std-link-opts -O3 -o $TARGET $SOURCES" )
+#  env.Program( exe_name, lib_opt_proj )
+#
+#  lib_test =     env.Command( bin_dir+'/'+test_name+'.bc',     test_obj + [o for o in objects if ( not re.match(".*/main.o$", str(o)) )] , "llvm-link -o $TARGET $SOURCES")
+#  lib_opt_test = env.Command( bin_dir+'/'+test_name+'_opt.bc', lib_test , "opt -std-compile-opts -std-link-opts -O3 -o $TARGET $SOURCES")
+#  env.Program( test_name, lib_opt_test )
+

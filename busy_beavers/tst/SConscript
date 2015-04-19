@@ -1,0 +1,8 @@
+Import('env')
+env = env.Clone()
+
+env['CPPPATH'] = [ env.include, "#%s/%s" % (env.src_dir, env.include) ]
+sources = Glob("*.cpp")
+objects = env.Object( sources )
+Return('objects')
+

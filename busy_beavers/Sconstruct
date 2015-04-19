@@ -1,0 +1,49 @@
+# Buld script for any simple project with a separate src, include and bin directories
+import os, re
+
+AddOption('--tst', dest='deb', action='store_true', help='Compiles in debug mode')
+AddOption('--opt', dest='opt', action='store_true', help='Compiles with all optimizations')
+
+####################### ENVIRONMENT SETUP #########################################################
+
+env = Environment()
+Export('env')
+# Fix to get compiler color output
+env['ENV']['TERM'] = os.environ['TERM']
+env.Decider('timestamp-newer')
+env.SetOption('num_jobs', 3)
+
+env['CXX'] = 'clang++'
+env['CPPPATH'] = [] 
+env['CXXFLAGS'] = ['-Wall', '-Werror', '-std=c++11']
+env['LIBS'] = []
+
+env.src_dir = 'src'
+env.tst_dir = 'tst'
+env.include = 'include'
+env.bin_prefix = 'bin'
+env.exe_name = 'find_beavers'
+
+if (GetOption('deb')):
+  bin_dir = env.bin_prefix + '/debug'
+  env.Append( CXXFLAGS = ['-g', '-O0'] )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=4', '-D__LEVEL_ASSERT__=1', '-D__PERF_STATS__=1'] )
+elif (GetOption('opt')):  
+  bin_dir = env.bin_prefix + '/optim'
+  env.Append( CXXFLAGS = ['-O3', '-mtune=native', '-march=native'] )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=2', '-D__LEVEL_ASSERT__=0', '-D__PERF_STATS__=1'] )
+else:  
+  bin_dir = env.bin_prefix + '/release'
+  env.Append( CXXFLAGS = '-O2' )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=3', '-D__LEVEL_ASSERT__=1', '-D__PERF_STATS__=1'] )
+
+#env.VariantDir(bin_dir, tst_dir, duplicate=False)
+
+####################### BUILD STEPS ###############################################################
+
+objects = []
+for dir in [env.src_dir, env.tst_dir]:
+  var_dir = bin_dir + '/' + dir
+  objects.append( env.SConscript(dirs=dir, variant_dir=var_dir, duplicate=False) )
+env.Program(env.exe_name, objects)
+
