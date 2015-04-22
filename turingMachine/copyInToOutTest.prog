@@ -1,0 +1,11 @@
+# Small test program for the turing machine simulator
+# It will simply copy the input into the output
+# Machine configuration : alphabet={_, 0, 1}, tapes=3
+
+-IN-> 0, 1, 1, a, a, 0, 1
+START => Qcopy () ()
+Qcopy (_, *) => HALT
+Qcopy (0, *) => Qcopy (0, *) (>, >, _)
+Qcopy (a, *) => Qcopy (a, *) (>, >, _)
+Qcopy (1, *) => Qcopy (1, *) (>, >, _)
+

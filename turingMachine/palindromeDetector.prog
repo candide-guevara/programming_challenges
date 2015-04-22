@@ -1,0 +1,24 @@
+# Small test program for the turing machine simulator
+# If the input is a palindrome then the output tape will contain a 1 else a 0
+# Machine configuration : alphabet={_, 0, 1}, tapes=3
+
+-IN-> S, 0, 1, 1, 0, 1, 1, 0, 1
+START => Qcopy () (>, _, _)
+
+Qcopy (0, *) => Qcopy (*, 0) (>, _, >)
+Qcopy (1, *) => Qcopy (*, 1) (>, _, >)
+Qcopy (_, *) => Qrewind () (<, _, <)
+
+Qrewind (0, *) => Qrewind () (<, _, _)
+Qrewind (1, *) => Qrewind () (<, _, _)
+Qrewind (S, *) => Qtest () (>, _, _)
+
+Qtest (0, 0) => Qtest () (>, _, <)
+Qtest (1, 1) => Qtest () (>, _, <)
+Qtest (_, *) => Qok (1, *) ()
+Qok () => HALT
+
+Qtest (0, 1) => Qko (0, *) ()
+Qtest (1, 0) => Qko (0, *) ()
+Qko () => HALT
+

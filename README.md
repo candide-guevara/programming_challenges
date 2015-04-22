@@ -4,6 +4,8 @@ A collection of nice programming puzzles in various languages.
 
 * Solve a Nurikabe grid
 * Find the busiest beavers
+* Find the shortest word chain
+* Build a turing machine
 
 ## Getting started
 
