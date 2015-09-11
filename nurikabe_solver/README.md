@@ -2,7 +2,7 @@
 
 While learning C++ I stumbled upon the [great series][1] by Stephan T. Lavavej.
 He challenges you to code a [Nurikabe solver][2] that you can test against his own.
-I could not manage to build a faster solver but at least I works :-)
+I could not manage to build a faster solver but at least it works :-)
 
 ## Dependencies
 
