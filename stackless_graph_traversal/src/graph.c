@@ -6,17 +6,18 @@
 GraphHandle build_graph_without_any_edges(uint32_t size) {
   ASSERT(size, "Cannot create an empty graph");
   GraphHandle graph;
-  graph.root = calloc(size, sizeof(CountedNode));
+  graph.root = calloc(size, sizeof(Node));
   graph.vertex_count = size;
   ASSERT(graph.root, "Could not allocate root memory");
 
   for(uint32_t i=0; i<size; ++i)
-    build_counted_node_in_place(graph.root + i, NULL);
+    build_node_in_place(graph.root + i, i);
 
   LOG_INFO("Built graph with %d nodes", graph.vertex_count);
   return graph;
 }
 
+// @breadth_order : The other of breadth first visit is the order of node allocation
 GraphHandle build_graph_dag(uint32_t size) {
   GraphHandle graph = build_graph_without_any_edges(size);
 
@@ -125,13 +126,13 @@ GraphHandle build_graph_amorphous(uint32_t size) {
   return graph;
 }
 
-void build_graph_with_cycles_in_helper(void* state, Node* node) {
-  Stack* stack = (Stack*) state;
+void build_graph_with_cycles_in_helper(VisitorState* state, Node* node) {
+  Stack* stack = (Stack*) state->user_state;
   push(stack, node);
 }
 
-void build_graph_with_cycles_out_helper(void* state, Node* node) {
-  Stack* stack = (Stack*) state;
+void build_graph_with_cycles_out_helper(VisitorState* state, Node* node) {
+  Stack* stack = (Stack*) state->user_state;
   pop(stack); // the result of pop should equal the node argument
   if (!stack->next) return;
 
@@ -153,12 +154,15 @@ void build_graph_with_cycles_out_helper(void* state, Node* node) {
   }
 }
 
+// @breadth_order : The other of breadth first visit is the order of node allocation
 GraphHandle build_graph_with_cycles(uint32_t size) {
   GraphHandle graph = build_graph_dag(size);
   Stack stack = build_stack(graph.vertex_count);
+  VisitorState visit_state = { .user_state = &stack };
+
   // we are going to mutate the graph while we traverse it
   // to avoid messing with the traversal, we mutate the nodes on our way out
-  two_way_depth_first_traversal((Node*)graph.root, &stack, 
+  two_way_depth_first_traversal((Node*)graph.root, &visit_state, 
       build_graph_with_cycles_in_helper, build_graph_with_cycles_out_helper);
 
   free_stack(&stack);
@@ -172,36 +176,41 @@ void free_graph(GraphHandle graph) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void standard_depth_first_traversal(Node* node, void* state, void (*visitor)(void*, Node*)) {
+// @breadth_order : The other of breadth first visit is the order of node allocation
+// @depth_order : The other of depth first visit is the order of node allocation
+GraphHandle build_graph_single_branch(uint32_t size) {
+  GraphHandle graph = build_graph_without_any_edges(size);
+  for(uint32_t i=0; i<size-1; ++i)
+    graph.root[i].slots[0] = graph.root + i + 1;
+  return graph;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void standard_depth_first_traversal(Node* node, VisitorState* visit_state, Visitor_t visitor) {
   if (!node) return;
   LOG_TRACE("Visit : %s", node->name);
-  visitor(state, node);
+  visitor(visit_state, node);
 
   for(uint32_t slot=0; slot < SLOT_COUNT; ++slot) {
     Node* child = node->slots[slot];
-    standard_depth_first_traversal(child, state, visitor);
+    standard_depth_first_traversal(child, visit_state, visitor);
   }
 }
 
-void two_way_depth_first_traversal(Node* node, void* state, 
-                                   void (*in_visitor)(void*, Node*), void (*out_visitor)(void*, Node*)) {
+void two_way_depth_first_traversal(Node* node, VisitorState* visit_state, 
+                                    Visitor_t in_visitor, Visitor_t out_visitor) {
   if (!node) return;
   LOG_TRACE("In visit : %s", node->name);
-  if (in_visitor) in_visitor(state, node);
+  if (in_visitor) in_visitor(visit_state, node);
 
   for(uint32_t slot=0; slot < SLOT_COUNT; ++slot) {
     Node* child = node->slots[slot];
-    two_way_depth_first_traversal(child, state, in_visitor, out_visitor);
+    two_way_depth_first_traversal(child, visit_state, in_visitor, out_visitor);
   }
 
   LOG_TRACE("Out visit : %s", node->name);
-  if (out_visitor) out_visitor(state, node);
-}
-
-void pointer_reversal_traversal(Node* node, void* state, void (*visitor)(void*, Node*)) {
-}
-
-void destructive_pointer_reversal_traversal(Node* node, void* state, void (*visitor)(void*, Node*)) {
+  if (out_visitor) out_visitor(visit_state, node);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -211,17 +220,37 @@ void dump_graph_dot_format(GraphHandle graph, const char* filepath) {
   LOG_INFO("Dumping graph to %s", filepath);
   ASSERT(dot_file, "Failed to open file");
 
-  fprintf(dot_file, "strict digraph {\n");
+  fprintf(dot_file, "digraph {\n");
   fprintf(dot_file, "  node  [ nodesep=1.5 ];\n");
-  fprintf(dot_file, "  graph [ overlap=false ];\n");
+  fprintf(dot_file, "  graph [ overlap=false; bgcolor=\"grey\" ];\n");
   fprintf(dot_file, "  edge  [ weight=0.5 ];\n");
 
   for(uint32_t i=0; i<graph.vertex_count; ++i) {
     Node* node = (Node*)(graph.root + i);
+    LOG_TRACE("Printing %u : %s", i, node->name);
+
+    if (i == 0 || i == graph.vertex_count-1)
+      fprintf_node_dot_format(dot_file, node, "cyan");
+    else if (is_leaf_node(node))
+      fprintf_node_dot_format(dot_file, node, "gold");
+    else if (is_leaf_node_ignore_back(node))
+      fprintf_node_dot_format(dot_file, node, "orange");
+    else
+      fprintf_node_dot_format(dot_file, node, NULL);
+
     for(uint32_t slot=0; slot < SLOT_COUNT; ++slot) {
-      Node* child = node->slots[slot];
+      Node* child = follow_edge(node->slots[slot]);
       if (child)
-        fprintf(dot_file, "  \"%s\" -> \"%s\"\n", node->name, child->name);
+        if (is_backwards(node->slots[slot]))
+          fprintf_edge_dot_format(dot_file, node, child, "red");
+        else if (get_flags_on_edge(node->slots[slot], SET_TRAVERSE_FLAG))
+          fprintf_edge_dot_format(dot_file, node, child, "blue");
+        else if (get_flags_on_edge(node->slots[slot], SET_VISIT_FLAG))
+          fprintf_edge_dot_format(dot_file, node, child, "green4");
+        else
+          fprintf_edge_dot_format(dot_file, node, child, NULL);
+      else if (is_backwards(node->slots[slot]))
+        fprintf_edge_dot_format(dot_file, node, NULL, "red");
     }
   }
 

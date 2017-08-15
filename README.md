@@ -6,6 +6,7 @@ A collection of nice programming puzzles in various languages.
 * Find the busiest beavers
 * Find the shortest word chain
 * Build a turing machine
+* Constant space (but longer time) graph traversal
 
 ## Getting started
 

@@ -11,26 +11,20 @@ enum __node_h__ {
 };
 
 typedef struct Node Node;
-typedef struct CountedNode CountedNode;
 
 struct Node {
   char name[NAME_LEN];
   Node* slots[SLOT_COUNT];
-};
-
-struct CountedNode {
-  Node data;
   uint32_t count;
 };
 
-Node build_node(const char* name);
-CountedNode build_counted_node(const char* name);
-void build_node_in_place(Node* node, const char* name);
-void build_counted_node_in_place(CountedNode* node, const char* name);
+Node build_node(uint32_t id);
+Node build_node_with_name (const char *name);
+void build_node_in_place(Node* node, uint32_t id);
+void build_node_in_place_with_name(Node* node, const char* name);
 
 const char* print_node(Node* node);
-const char* print_counted_node(CountedNode* node);
 void print_slots(Node* node, char* buffer, int32_t buffer_len);
 
-const char* give_me_random_name();
+const char* give_me_random_name(uint32_t id);
 

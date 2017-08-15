@@ -1,17 +1,18 @@
 .ONESHELL:
 .SECONDARY:
-.PHONY: all clean 
+.PHONY: all clean images
 
 BIN_DIR := bin
 SRC_DIR := src
 INC_DIR := include
 
+FLAME_ROOT := $(HOME)/Programation/Perl/FlameGraph
 CC       := gcc
 CPPFLAGS := 
 opt: CPPFLAGS := $(CPPFLAGS) -D__LEVEL_LOG__=2 -D__LEVEL_ASSERT__=0
 dbg: CPPFLAGS := $(CPPFLAGS) -D__LEVEL_LOG__=4 -D__LEVEL_ASSERT__=1
 CFLAGS   := -std=c99 -I $(INC_DIR) -Wall -Werror
-opt: CFLAGS := $(CFLAGS) -mtune=native -march=native -O3
+opt: CFLAGS := $(CFLAGS) -ggdb -mtune=native -march=native -O3
 dbg: CFLAGS := $(CFLAGS) -ggdb -fsanitize=address
 LDFLAGS  :=
 dbg: LDFLAGS := $(LDFLAGS) -fsanitize=address
@@ -27,10 +28,16 @@ all: $(flavors);
 init_% :
 	mkdir -p "$(BIN_DIR)/$*"
 
-%_images : %
+images : 
 	cd $(BIN_DIR)
-	$^/project
+	echo building images for *.dot
 	for f in *.dot; do cat $$f | neato -Tsvg > "$${f}.svg"; done
+
+%_prof : %
+	cd $(BIN_DIR)
+	sudo perf record -F 997 --call-graph dwarf -- $*/project
+	sudo chown $$USER:$$USER perf.data
+	perf script | perl $(FLAME_ROOT)/stackcollapse-perf.pl | perl $(FLAME_ROOT)/flamegraph.pl --hash --minwidth=5 > flame_prof_$*.svg
 
 package :
 	tar -hzcf package_$(shell date +%d_%m_%y).tar $(BIN_DIR) $(SRC_DIR) $(INC_DIR)
