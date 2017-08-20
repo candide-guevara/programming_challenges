@@ -1,6 +1,5 @@
 #pragma once
 
-#include <stdio.h>
 #include <stdint.h>
 
 #include "graph.h"
@@ -18,6 +17,22 @@ void free_stack(Stack* stack);
 void push(Stack* stack, void* item);
 void* pop(Stack* stack);
 void* peek(Stack* stack, size_t index);
+
+////////////////////////////////////////////////////////////////////////////
+
+typedef struct SillyVector SillyVector;
+
+struct SillyVector {
+  void **items;
+  size_t capacity, size;
+};
+
+SillyVector build_vector(size_t capacity);
+void free_vector(SillyVector* vector);
+void* vector_append(SillyVector* vector, void* item);
+uint32_t vector_contains(SillyVector* vector, void* item);
+uint32_t vector_size(SillyVector* vector);
+uint32_t vector_capacity(SillyVector* vector);
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -107,4 +122,9 @@ void free_count_state(VisitorState *visit_state);
 void count_visitor (VisitorState* visit_state, Node* node);
 void monotonic_count_visitor (VisitorState* visit_state, Node* node);
 void nop_visitor (VisitorState* visit_state, Node* node);
+
+////////////////////////////////////////////////////////////////////////////
+
+// Bases accepted : K=1024, M=1024**2, G=1024**3
+int64_t atoi_with_base(const char *str_int);
 

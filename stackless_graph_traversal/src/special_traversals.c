@@ -1,5 +1,9 @@
 #include <special_traversals.h>
 
+#include <stdlib.h>
+#include <sys/sdt.h>
+
+#include <logger.h>
 #include <common.h>
 #include <util.h>
 
@@ -42,6 +46,30 @@ void destructive_pointer_reversal_traversal(Node* node, VisitorState* visit_stat
       tmp_node->count = next_slot + 1;
     }
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+static void destructive_std_depth_first_traversal_helper(
+    Node* node, VisitorState* visit_state, Visitor_t visitor, uint32_t stack_depth) {
+  // We add a max recursion depth to avoid overflow even if it changes traversal order
+  if (!node || node->count == 1) return;
+  if (stack_depth > 8192) {
+    MY_DTRACE_PROBE1(prune_branch, stack_depth);
+    return; //place probe here to detect branch pruning
+  }
+  LOG_TRACE("Visit : %s", node->name);
+  visitor(visit_state, node);
+  node->count = 1;
+
+  for(uint32_t slot=0; slot < SLOT_COUNT; ++slot) {
+    Node* child = node->slots[slot];
+    destructive_std_depth_first_traversal_helper(child, visit_state, visitor, stack_depth+1);
+  }
+}
+
+void destructive_std_depth_first_traversal(Node* node, VisitorState* visit_state, Visitor_t visitor) {
+  destructive_std_depth_first_traversal_helper(node, visit_state, visitor, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -171,16 +199,18 @@ void pr_debug_pointer_traversal_state(Pr_TraverseState state, VisitorState* visi
   char filepath[128];
   static uint32_t __NAME_ID__ = 0;
 
-  Node *root = visit_state->graph.root;
-  #pragma GCC diagnostic ignored "-Wformat-truncation"
-  snprintf(filepath, sizeof(filepath), "graph_%s_%u_%s_%u.dot", 
-            root->name, __NAME_ID__++, state.current->name, state.next_slot);
-  #pragma GCC diagnostic pop
-  //dump_graph_dot_format(visit_state->graph, filepath);
-
   LOG_INFO("state : %p, %p, %u, %lu", state.current, state.previous, state.next_slot, state.tag_token);
   LOG_INFO("current : %s", print_node(state.current));
   LOG_INFO("previous : %s\n", print_node(state.previous));
+
+  if(visit_state) {
+    Node *root = visit_state->graph.root;
+    #pragma GCC diagnostic ignored "-Wformat-truncation"
+    snprintf(filepath, sizeof(filepath), "graph_%s_%u_%s_%u.dot", 
+              root->name, __NAME_ID__++, state.current->name, state.next_slot);
+    #pragma GCC diagnostic pop
+    dump_graph_dot_format(visit_state->graph, filepath);
+  }
   #endif
 }
 
@@ -368,22 +398,27 @@ uint32_t bf_pathological_branch_loop_back(Node *node, uint32_t child_edge) {
   // The inverted edge we write while traversing forward serves as a "breadcrumb" 
   // to identify the previous nodes of this branch
   for(uint32_t i=0; i<SLOT_COUNT && !is_a_loop; ++i) 
-    if (is_backwards(child->slots[i])) 
+    if (is_backwards(child->slots[i])) {
+      MY_DTRACE_PROBE2(patho_branch_loop, node, child_edge);
       is_a_loop = 1;
+    }
   return is_a_loop;
 }
 
 void bf_debug_pointer_traversal_state(Bf_TraverseState state, VisitorState* visit_state) {
   #ifdef TRAVERSE_TRACE
   char filepath[128];
-  Node *root = visit_state->graph.root;
-  snprintf(filepath, sizeof(filepath), "graph_%s_%u_%u_%u.dot", 
-            root->name, state.gen, state.next_tail_gen, state.queue_len);
-  dump_graph_dot_format(visit_state->graph, filepath);
 
   LOG_INFO("state : %p, %p, %u, %u, %u", state.tail, state.parent, state.gen, state.next_tail_gen, state.queue_len);
   LOG_INFO("tail : %s", print_node(state.tail));
   LOG_INFO("parent : %s\n", print_node(state.parent));
+
+  if (visit_state) {
+    Node *root = visit_state->graph.root;
+    snprintf(filepath, sizeof(filepath), "graph_%s_%u_%u_%u.dot", 
+              root->name, state.gen, state.next_tail_gen, state.queue_len);
+    dump_graph_dot_format(visit_state->graph, filepath);
+  }
   #endif
 }
 

@@ -8,6 +8,7 @@
 
 #define __LOG__(level, format, ...) \
   printf("[%s]%s:%d - " format "\n", level, __FILE__,__LINE__, ##__VA_ARGS__)
+  //printf("[%s]%s:%d - " format "\n", level, __func__,__LINE__, ##__VA_ARGS__)
 
 #ifdef __LOG_TRACE__
   #define LOG_TRACE(format, ...) __LOG__("TRCE",format,##__VA_ARGS__)

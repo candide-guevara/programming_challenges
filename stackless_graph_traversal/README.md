@@ -14,23 +14,27 @@ Instead of keeping the visited nodes inside a separate stack (depth-first) or qu
 ## Dependencies
 
 * [graphviz][1] : displays graphs dump in dot files
-* perf events : collects hardware counters and profiles
+* [perf events][2] : collects hardware counters and profiles
 * [flamegraph][0] : outputs a nice representation of profiling data
+* matplotlib and pandas : plot traversal time as a function of vertex count
 
 ## Usage
 
-* Go to `sc/main.c` and uncomment what you want to run
+* Go to `src/main.c` and check available commands
+  * Example : `./project stress_runtime_complexity_all_algo 128K report.log`
 * Build the code (2 flavors debug and optimized) : `make dbg|opt`
 * Run the code in `bin/dbg/project`
+* Or run advanced tasks uding make targets : `complexity`,`hw_counters`,`flamegraph` ...
 * Generate svg graphs : `make images`
-* Profile with perf events (may need root priviledge) : `make dbg|opt_prof`
 
 ## Directories
 
 * `bin/` : where build artifacts are stored
 * `include/` : header files
 * `src/` : the code, tests, and stress tests
+* `etc/` : misc scripts
 
 [0]: https://github.com/brendangregg/FlameGraph
 [1]: http://www.graphviz.org/
+[2]: http://sandsoftwaresound.net/perf/perf-tut-count-hw-events/
 

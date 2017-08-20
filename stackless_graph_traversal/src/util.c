@@ -1,5 +1,8 @@
 #include <util.h>
 
+#include <stdlib.h>
+
+#include <logger.h>
 #include <common.h>
 
 Stack build_stack(size_t capacity) {
@@ -32,6 +35,38 @@ void* peek(Stack* stack, size_t index) {
   ASSERT(index < stack->next, "Invalid stack location");
   return stack->items[index];
 }
+
+////////////////////////////////////////////////////////////////////////////
+
+SillyVector build_vector(size_t capacity) {
+  SillyVector vector = {0};
+  if(capacity) {
+    vector.items = calloc(capacity, sizeof(void*));
+    vector.capacity = capacity;
+  }
+  return vector;
+}
+
+void free_vector(SillyVector* vector) {
+  if (vector->items)
+    free(vector->items);
+}
+
+uint32_t vector_contains(SillyVector* vector, void* item) {
+  uint32_t found = 0;
+  for(; found < vector->capacity && item != vector->items[found]; ++found);
+  return found < vector->capacity;
+}
+
+void* vector_append(SillyVector* vector, void* item) {
+  if (vector->capacity <= vector->size) return NULL;
+  vector->items[vector->size] = item;
+  vector->size += 1;
+  return item;
+}
+
+uint32_t vector_size(SillyVector* vector) { return vector->size; }
+uint32_t vector_capacity(SillyVector* vector) { return vector->capacity; }
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -165,5 +200,19 @@ GraphHandle build_graph_branch_with_fanout() {
   for(uint32_t i=0; i<SLOT_COUNT; ++i)
     graph.root[2].slots[i] = graph.root + 3 + i;
   return graph;
+}
+
+////////////////////////////////////////////////////////////////////////////
+
+int64_t atoi_with_base(const char *str_int) {
+  char *base_start = NULL;
+  int64_t result = strtoll(str_int, &base_start, 0);
+  if (base_start && *base_start != '\0') {
+    char base = *base_start;
+    if (base == 'K') result *= 1024;
+    if (base == 'M') result *= 1024*1024;
+    if (base == 'G') result *= 1024*1024*1024;
+  }
+  return result;
 }
 

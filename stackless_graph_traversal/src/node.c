@@ -1,5 +1,9 @@
 #include <node.h>
 
+#include <stdlib.h>
+#include <string.h>
+
+#include <logger.h>
 #include <common.h>
 
 static const char* DICTIONARY[] = {
@@ -10,13 +14,13 @@ static const char* DICTIONARY[] = {
 static const uint32_t DICT_LEN = sizeof(DICTIONARY) / sizeof(const char*);
 
 void build_node_in_place_with_name(Node* node, const char* name) {
-  bzero(node, sizeof(Node));
+  memset(node, 0, sizeof(Node));
   strncpy(node->name, name, (size_t)NAME_LEN);
   LOG_TRACE("Built node %s", node->name);
 }
 
 void build_node_in_place(Node* node, uint32_t id) {
-  bzero(node, sizeof(Node));
+  memset(node, 0, sizeof(Node));
   strncpy(node->name, give_me_random_name(id), (size_t)NAME_LEN);
   LOG_TRACE("Built node %s", node->name);
 }

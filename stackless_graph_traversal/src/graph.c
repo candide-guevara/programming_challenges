@@ -1,5 +1,9 @@
 #include <graph.h>
 
+#include <stdlib.h>
+#include <string.h>
+
+#include <logger.h>
 #include <common.h>
 #include <util.h>
 
@@ -174,6 +178,11 @@ void free_graph(GraphHandle graph) {
     free(graph.root);
 }
 
+void free_persisted_graph(PersistedGraph graph) {
+  if (graph.root && graph.vertex_count)
+    free(graph.root);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // @breadth_order : The other of breadth first visit is the order of node allocation
@@ -199,7 +208,7 @@ void standard_depth_first_traversal(Node* node, VisitorState* visit_state, Visit
 }
 
 void two_way_depth_first_traversal(Node* node, VisitorState* visit_state, 
-                                    Visitor_t in_visitor, Visitor_t out_visitor) {
+                                   Visitor_t in_visitor, Visitor_t out_visitor) {
   if (!node) return;
   LOG_TRACE("In visit : %s", node->name);
   if (in_visitor) in_visitor(visit_state, node);
@@ -211,6 +220,58 @@ void two_way_depth_first_traversal(Node* node, VisitorState* visit_state,
 
   LOG_TRACE("Out visit : %s", node->name);
   if (out_visitor) out_visitor(visit_state, node);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+PersistedGraph build_persist_graph_buffer(uint32_t capacity) {
+  PersistedGraph graph_buf = {0};
+  graph_buf.root = calloc(capacity, sizeof(Node));
+  ASSERT(graph_buf.root, "Failed graph buffer allocation");
+  graph_buf.vertex_count = capacity;
+  return graph_buf;
+}
+
+PersistedGraph persist_graph_to_new_buffer(GraphHandle graph) {
+  PersistedGraph graph_buf = build_persist_graph_buffer(graph.vertex_count);
+  persist_graph_to_old_buffer(&graph_buf, graph);
+  return graph_buf;
+}
+
+void persist_graph_to_old_buffer(PersistedGraph *graph_buf, GraphHandle graph) {
+  ASSERT(graph.vertex_count <= graph_buf->vertex_count, "Cannot persist graph, not enough space");
+  memcpy(graph_buf->root, graph.root, graph.vertex_count * sizeof(Node));
+  graph_buf->vertex_count = graph.vertex_count;
+  graph_buf->offset.as_ptr = graph.root;
+  graph_buf->slot_count= SLOT_COUNT;
+}
+
+GraphHandle restore_graph_from_buffer(PersistedGraph graph_buf) {
+  GraphHandle new_graph = {0};
+  new_graph.vertex_count = graph_buf.vertex_count;
+  new_graph.root = calloc(new_graph.vertex_count, sizeof(Node));
+  
+  restore_graph_from_buffer_no_offset_adjust(graph_buf, new_graph);
+
+  // now we need to adjust the edge pointers to the new offset
+  size_t adjust = (size_t)new_graph.root - graph_buf.offset.as_int;
+  for (uint32_t i=0; i<new_graph.vertex_count; ++i)
+    for (uint32_t j=0; j<SLOT_COUNT; ++j) {
+      size_t edge = (size_t)(new_graph.root[i].slots[j]);
+      if (follow_edge((void*)edge) == 0) continue;
+      edge += adjust;
+      //LOG_TRACE("Move %p -> %p", new_graph.root[i].slots[j], (void*)edge);
+      new_graph.root[i].slots[j] = (void*)edge;
+    }
+  return new_graph;
+}
+
+void restore_graph_from_buffer_no_offset_adjust(PersistedGraph graph_buf, GraphHandle graph) {
+  LOG_TRACE("Restoring graph with %d nodes into %p", graph_buf.vertex_count, graph.root);
+  ASSERT(graph.vertex_count >= graph_buf.vertex_count, "Cannot restore graph, not enough space");
+  ASSERT(SLOT_COUNT >= graph_buf.slot_count, "Cannot restore graph, incompatible node type");
+  memcpy(graph.root, graph_buf.root, graph_buf.vertex_count * sizeof(Node));
+  graph.vertex_count = graph_buf.vertex_count;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

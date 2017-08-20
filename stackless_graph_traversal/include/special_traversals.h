@@ -8,6 +8,8 @@ void pointer_reversal_traversal(Node* node, VisitorState* visit_state, Visitor_t
 void destructive_pointer_reversal_traversal(Node* node, VisitorState* visit_state, Visitor_t visitor);
 // Inefficient breadth first
 void destructive_pointer_back_and_forth_traversal(Node* node, VisitorState* visit_state, Visitor_t visitor);
+// Tweaked to handle graph cycles and avoid stack overflow
+void destructive_std_depth_first_traversal(Node* node, VisitorState* visit_state, Visitor_t visitor);
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 

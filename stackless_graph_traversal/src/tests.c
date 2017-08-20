@@ -1,8 +1,14 @@
+#include <tests.h>
+
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <logger.h>
 #include <common.h>
 #include <util.h>
 #include <graph.h>
 #include <special_traversals.h>
-#include <tests.h>
 
 void test_build_nodes () {
   #pragma GCC diagnostic ignored "-Wunused-variable"
@@ -238,6 +244,13 @@ void helper_traversal_on_loop_to_itself(TraversalAlgo_t traversal_algo) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+void test_destructive_std_depth_first_traversal() {
+  helper_traversal_on_three_four_nodes(destructive_std_depth_first_traversal);
+  helper_traversal_on_branches(destructive_std_depth_first_traversal);
+  helper_traversal_on_single_branch(destructive_std_depth_first_traversal);
+  helper_traversal_on_loop_to_itself(destructive_std_depth_first_traversal);
+}
+
 void test_destructive_pointer_reversal_traversal(uint32_t size) {
   helper_traversal_on_three_four_nodes(destructive_pointer_reversal_traversal);
   helper_traversal_on_branches(destructive_pointer_reversal_traversal);
@@ -245,8 +258,6 @@ void test_destructive_pointer_reversal_traversal(uint32_t size) {
   helper_traversal_on_loop_to_itself(destructive_pointer_reversal_traversal);
   helper_traversal_on_real_graphs(size, destructive_pointer_reversal_traversal);
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void test_destructive_pointer_back_and_forth_traversal(uint32_t size) {
   helper_traversal_on_three_four_nodes(destructive_pointer_back_and_forth_traversal);
@@ -271,5 +282,43 @@ void test_pointer_reversal_traversal(uint32_t size) {
   ASSERT_VISIT_COUNT(pointer_reversal_traversal, visit_state, true);
   free_graph(graph);
   free_count_state(visit_state);*/
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void test_graph_persist_to_buf(uint32_t size) {
+  VisitorState* visit_state = new_count_state();
+  uint32_t *counter = &(((CountState*)(visit_state->user_state))->counter);
+  GraphHandle graph = build_graph_dag(size);
+  PersistedGraph graph_buf = persist_graph_to_new_buffer(graph);
+
+  restore_graph_from_buffer_no_offset_adjust(graph_buf, graph);
+  reset_count_state(visit_state, graph);
+  standard_depth_first_traversal(graph.root, visit_state, count_visitor);
+  TEST_ASSERT(*counter == size, "Visited wrong number of nodes : %u/%u", size, *counter);
+
+  memset(graph.root, 0, graph.vertex_count * sizeof(Node));
+  restore_graph_from_buffer_no_offset_adjust(graph_buf, graph);
+  reset_count_state(visit_state, graph);
+  standard_depth_first_traversal(graph.root, visit_state, count_visitor);
+  TEST_ASSERT(*counter == size, "Visited wrong number of nodes : %u/%u", size, *counter);
+
+  GraphHandle graph2 = restore_graph_from_buffer(graph_buf);
+  reset_count_state(visit_state, graph2);
+  standard_depth_first_traversal(graph2.root, visit_state, count_visitor);
+  TEST_ASSERT(*counter == size, "Visited wrong number of nodes : %u/%u", size, *counter);
+
+  memset(graph_buf.root, 0, graph_buf.vertex_count * sizeof(Node));
+  reset_count_state(visit_state, graph2);
+  standard_depth_first_traversal(graph2.root, visit_state, count_visitor);
+  TEST_ASSERT(*counter == size, "Visited wrong number of nodes : %u/%u", size, *counter);
+  reset_count_state(visit_state, graph);
+  standard_depth_first_traversal(graph.root, visit_state, count_visitor);
+  TEST_ASSERT(*counter == size, "Visited wrong number of nodes : %u/%u", size, *counter);
+
+  free_graph(graph);
+  free_graph(graph2);
+  free_persisted_graph(graph_buf);
+  free_count_state(visit_state);
 }
 
