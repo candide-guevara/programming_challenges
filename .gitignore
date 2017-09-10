@@ -3,4 +3,5 @@ nurikabe_solver/board_dump.txt
 nurikabe_solver/stl_solver
 **/project
 **/test_suite
+**/bin
 

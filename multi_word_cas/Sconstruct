@@ -1,0 +1,44 @@
+# Buld script for any simple project with a separate src, include and bin directories
+import os, re
+
+AddOption('--tst', dest='deb', action='store_true', help='Compiles in debug mode')
+AddOption('--opt', dest='opt', action='store_true', help='Compiles with all optimizations')
+
+####################### ENVIRONMENT SETUP #########################################################
+
+src_dir = 'src'
+tst_dir = 'tst'
+include_dir = 'include'
+bin_prefix = 'bin'
+exe_name = 'project'
+
+env = Environment()
+# Fix to get compiler color output
+env['ENV']['TERM'] = os.environ['TERM']
+env.Decider('timestamp-newer')
+env.SetOption('num_jobs', 3)
+
+env['CC'] = 'gcc'
+env['CPPPATH'] = include_dir
+env['CCFLAGS'] = ['-Wall', '-Werror', '-std=c11']
+env['LIBS'] = []
+
+if (GetOption('deb')):
+  bin_dir = bin_prefix + '/debug'
+  env.Append( CCFLAGS = ['-g', '-O0'] )
+elif (GetOption('opt')):  
+  bin_dir = bin_prefix + '/optim'
+  env.Append( CCFLAGS = ['-O3', '-mtune=native', '-march=native'] )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=1', '-D__LEVEL_ASSERT__=0'] )
+else:  
+  bin_dir = bin_prefix + '/release'
+  env.Append( CCFLAGS = '-O1' )
+  env.Append( CPPFLAGS = ['-D__LEVEL_LOG__=3'] )
+
+env.VariantDir(bin_dir, src_dir, duplicate=False)
+
+####################### BUILD STEPS ###############################################################
+
+objects = env.Object( Glob(bin_dir + "/*.c") )
+env.Program(exe_name, objects )
+
