@@ -1,21 +1,21 @@
 .ONESHELL:
 .SECONDARY:
-.PHONY: all clean package hw_counters
+.PHONY: all .tags clean package hw_counters
 
 BIN_DIR := bin
 SRC_DIR := src
 INC_DIR := include
 
-CC       := gcc
+CC       := clang
 CPPFLAGS := 
-opt: CPPFLAGS := $(CPPFLAGS) -D__LEVEL_LOG__=2 -D__LEVEL_ASSERT__=0
-dbg: CPPFLAGS := $(CPPFLAGS) -D__LEVEL_LOG__=4 -D__LEVEL_ASSERT__=1
-CFLAGS   := -std=c99 -I $(INC_DIR) -Wall -Werror
+opt: CPPFLAGS := $(CPPFLAGS) -D_GNU_SOURCE -D__LEVEL_LOG__=2 -D__LEVEL_ASSERT__=0
+dbg: CPPFLAGS := $(CPPFLAGS) -D_GNU_SOURCE -D__LEVEL_LOG__=4 -D__LEVEL_ASSERT__=1
+CFLAGS   := -std=c11 -I $(INC_DIR) -Wall -Wno-missing-braces -Werror
 opt: CFLAGS := $(CFLAGS) -mtune=native -march=native -O3
-dbg: CFLAGS := $(CFLAGS) -ggdb -fsanitize=address
+dbg: CFLAGS := $(CFLAGS) -ggdb -fsanitize=thread
 LDFLAGS  :=
-dbg: LDFLAGS := $(LDFLAGS) -fsanitize=address
-LDLIBS   :=
+dbg: LDFLAGS := $(LDFLAGS) -fsanitize=thread
+LDLIBS   := -pthread
 
 flavors = opt dbg
 headers = $(wildcard $(INC_DIR)/*.h)
@@ -45,6 +45,14 @@ hw_counters : $(flavors)
 
 package :
 	tar -hzcf package_$(shell date +%d_%m_%y).tar $(BIN_DIR) $(SRC_DIR) $(INC_DIR)
+
+.tags:
+	# we use tac to invert the sorting order of tags to put definitions first
+	# useful when jump around with vim
+	find src include -iname '*.h' -o -iname '*.c' \
+		| ctags --extra=+f --c-kinds=+p+d \
+			--exclude='.git' --exclude='.hg' --exclude='bin' -L - -f - \
+	  | tac > .tags
 
 clean:
 	rm -rf $(BIN_DIR)/*
