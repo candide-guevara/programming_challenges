@@ -1,20 +1,22 @@
 .ONESHELL:
 .SECONDARY:
-.PHONY: all .tags clean package hw_counters
+.PHONY: all .tags sanitize clean package hw_counters
 
 BIN_DIR := bin
 SRC_DIR := src
 INC_DIR := include
 
-CC       := clang
+CC       := gcc
 CPPFLAGS := 
 opt: CPPFLAGS := $(CPPFLAGS) -D_GNU_SOURCE -D__LEVEL_LOG__=2 -D__LEVEL_ASSERT__=0
 dbg: CPPFLAGS := $(CPPFLAGS) -D_GNU_SOURCE -D__LEVEL_LOG__=4 -D__LEVEL_ASSERT__=1
-CFLAGS   := -std=c11 -I $(INC_DIR) -Wall -Wno-missing-braces -Werror
+
+CFLAGS   := -std=c11 -I $(INC_DIR) -Wall -Wno-missing-braces -Wno-unused-function -Werror $(user_cflags)
 opt: CFLAGS := $(CFLAGS) -mtune=native -march=native -O3
-dbg: CFLAGS := $(CFLAGS) -ggdb -fsanitize=thread
-LDFLAGS  :=
-dbg: LDFLAGS := $(LDFLAGS) -fsanitize=thread
+dbg: CFLAGS := $(CFLAGS) -ggdb $(compile_sanitize)
+
+LDFLAGS  := $(user_ldflags)
+dbg: LDFLAGS := $(LDFLAGS) $(link_sanitize)
 LDLIBS   := -pthread
 
 flavors = opt dbg
@@ -26,6 +28,15 @@ all: $(flavors);
 %: init_% $(BIN_DIR)/%/project ;
 init_% :
 	mkdir -p "$(BIN_DIR)/$*"
+
+sanitize:
+	sanitizers=( -fsanitize=address -fsanitize=leak -fsanitize=thread -fsanitize=undefined )
+	for sanitizer in $${sanitizers[@]}; do
+		rm -rf $(BIN_DIR)/dbg
+		make dbg "compile_sanitize=-O1 $$sanitizer" "link_sanitize=$$sanitizer" || exit 1
+		$(BIN_DIR)/dbg/project || exit 2
+	done
+	rm -rf $(BIN_DIR)/dbg
 
 hw_counters : $(flavors)
 	cd $(BIN_DIR)

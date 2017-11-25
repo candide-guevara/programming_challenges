@@ -43,7 +43,7 @@ void __my_assert__(int condition);
 #define DEFINE_ENUM_TO_STRING(name, body)                                                                              \
   const char *name##_to_string(name id) {                                                                              \
     static const char *labels[] = { body(ENUM_NAME) };                                                                 \
-    if (id < sizeof(labels) / sizeof(const char *))                                                                    \
+    if ((int)id < sizeof(labels) / sizeof(const char *))                                                               \
       return labels[id];                                                                                               \
     return NULL;                                                                                                       \
   }
@@ -77,20 +77,20 @@ void __my_assert__(int condition);
 #endif
 
 #if __LEVEL_CHRONO__ > 0
-#define CHRONO_START(chrono_id) __chrono_start__(chrono_id)
-#define CHRONO_STOP(chrono_id) __chrono_stop__(chrono_id)
+#define CHRONO_START(chrono_who, chrono_id) __chrono_start__(chrono_who, chrono_id)
+#define CHRONO_STOP(chrono_who, chrono_id) __chrono_stop__(chrono_who, chrono_id)
 #else
-#define CHRONO_START(chrono_id)
-#define CHRONO_STOP(chrono_id)
+#define CHRONO_START(chrono_who, chrono_id)
+#define CHRONO_STOP(chrono_who, chrono_id)
 #endif
 
-#define CHRONOID_ENUM(XX) XX(__CHRONO_FIRST__), XX(__CHRONO_SECOND__), XX(__CHRONO_LAST__),
+#define CHRONOID_ENUM(XX) XX(__CHRONO_FIRST__), XX(__CHRONO_SECOND__), XX(CAS_CONCURRENT_READERS), XX(__CHRONO_LAST__),
 
 DECLARE_NAMED_ENUM(ChronoId, CHRONOID_ENUM)
 struct rusage;
 
-void __chrono_start__(ChronoId);
-void __chrono_stop__(ChronoId);
+void __chrono_start__(int, ChronoId);
+void __chrono_stop__(int, ChronoId);
 
 const struct rusage *get_chrono(ChronoId);
 void diff_chrono_by_id(struct rusage *, ChronoId, ChronoId);
@@ -118,6 +118,12 @@ void *get_function_by_name(const char *);
 #define __COMPILER__ GCC
 #else
 #define __COMPILER__ CouldNotDetectCompiler
+#endif
+
+#ifdef __has_feature
+#if __has_feature(thread_sanitizer)
+#define __SANITIZER_THREAD_ON__
+#endif
 #endif
 
 #define IGNORE_WARNING_PUSH(flag)                                                                                      \

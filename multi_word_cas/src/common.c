@@ -13,7 +13,7 @@
 
 IGNORE_WARNING_PUSH("-Wunused-function")
 // Use this to set breakpoints to trap assertion violations
-void __my_assert__(int condition) { assert(condition); }
+void __my_assert__(int condition) { exit(condition); }
 IGNORE_WARNING_POP
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -34,11 +34,11 @@ static struct rusage __total_chrono__[__CHRONO_LAST__];
 
 DEFINE_ENUM_TO_STRING(ChronoId, CHRONOID_ENUM)
 
-void __chrono_start__(ChronoId id) { getrusage(RUSAGE_THREAD, __tmp_chrono__ + id); }
+void __chrono_start__(int who, ChronoId id) { getrusage(who, __tmp_chrono__ + id); }
 
-void __chrono_stop__(ChronoId id) {
+void __chrono_stop__(int who, ChronoId id) {
   struct rusage final_value;
-  getrusage(RUSAGE_THREAD, &final_value);
+  getrusage(who, &final_value);
 
   TV_ADD_DIFF(__total_chrono__[id], __tmp_chrono__[id], final_value);
   FIELD_ADD_DIFF(ru_minflt, __total_chrono__[id], __tmp_chrono__[id], final_value);
