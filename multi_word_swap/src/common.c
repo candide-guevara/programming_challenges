@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <logger.h>
 
@@ -26,20 +27,30 @@ IGNORE_WARNING_POP
   FIELD_ADD_DIFF(ru_stime.tv_sec, dest, start, stop);                                                                  \
   FIELD_ADD_DIFF(ru_stime.tv_usec, dest, start, stop)
 
-#define TV_TO_SECS(elapsed) (double)elapsed.tv_sec + (double)(elapsed.tv_usec) / 1000000
+#define TS_ADD_DIFF(dest, start, stop)                                                                                 \
+  FIELD_ADD_DIFF(tv_sec, dest, start, stop);                                                                           \
+  FIELD_ADD_DIFF(tv_nsec, dest, start, stop);
 
 // static vars are always zero init in c99
 static struct rusage __tmp_chrono__[__CHRONO_LAST__];
+static struct timespec __tmp_real_time__[__CHRONO_LAST__];
 static struct rusage __total_chrono__[__CHRONO_LAST__];
+static struct timespec __total_real_time__[__CHRONO_LAST__];
 
 DEFINE_ENUM_TO_STRING(ChronoId, CHRONOID_ENUM)
 
-void __chrono_start__(int who, ChronoId id) { getrusage(who, __tmp_chrono__ + id); }
+void __chrono_start__(int who, ChronoId id) {
+  getrusage(who, __tmp_chrono__ + id);
+  clock_gettime(CLOCK_REALTIME_COARSE, __tmp_real_time__ + id);
+}
 
 void __chrono_stop__(int who, ChronoId id) {
   struct rusage final_value;
+  struct timespec final_time;
   getrusage(who, &final_value);
+  clock_gettime(CLOCK_REALTIME_COARSE, &final_time);
 
+  TS_ADD_DIFF(__total_real_time__[id], __tmp_real_time__[id], final_time);
   TV_ADD_DIFF(__total_chrono__[id], __tmp_chrono__[id], final_value);
   FIELD_ADD_DIFF(ru_minflt, __total_chrono__[id], __tmp_chrono__[id], final_value);
   FIELD_ADD_DIFF(ru_majflt, __total_chrono__[id], __tmp_chrono__[id], final_value);
@@ -48,6 +59,7 @@ void __chrono_stop__(int who, ChronoId id) {
 }
 
 const struct rusage *get_chrono(ChronoId id) { return __total_chrono__ + id; }
+const struct timespec *get_real_time(ChronoId id) { return __total_real_time__ + id; }
 
 void diff_chrono_by_id(struct rusage *result, ChronoId id_start, ChronoId id_stop) {
   return diff_chrono_by_obj(result, get_chrono(id_start), get_chrono(id_stop));

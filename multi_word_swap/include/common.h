@@ -84,7 +84,10 @@ void __my_assert__(int condition);
 #define CHRONO_STOP(chrono_who, chrono_id)
 #endif
 
-#define CHRONOID_ENUM(XX) XX(__CHRONO_FIRST__), XX(__CHRONO_SECOND__), XX(CAS_CONCURRENT_READERS), XX(__CHRONO_LAST__),
+#define CHRONOID_ENUM(XX) XX(__CHRONO_FIRST__), XX(__CHRONO_SECOND__), XX(__CHRONO_LAST__),
+
+#define TV_TO_SECS(elapsed) (double)(elapsed).tv_sec + (double)((elapsed).tv_usec) / 1000000
+#define TS_TO_SECS(elapsed) (double)(elapsed).tv_sec + (double)((elapsed).tv_nsec) / 1000000000
 
 DECLARE_NAMED_ENUM(ChronoId, CHRONOID_ENUM)
 struct rusage;
@@ -93,6 +96,7 @@ void __chrono_start__(int, ChronoId);
 void __chrono_stop__(int, ChronoId);
 
 const struct rusage *get_chrono(ChronoId);
+const struct timespec *get_real_time(ChronoId);
 void diff_chrono_by_id(struct rusage *, ChronoId, ChronoId);
 void diff_chrono_by_obj(struct rusage *, const struct rusage *, const struct rusage *);
 void clear_chrono_by_id(ChronoId);
