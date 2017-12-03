@@ -41,14 +41,14 @@ DEFINE_ENUM_TO_STRING(ChronoId, CHRONOID_ENUM)
 
 void __chrono_start__(int who, ChronoId id) {
   getrusage(who, __tmp_chrono__ + id);
-  clock_gettime(CLOCK_REALTIME_COARSE, __tmp_real_time__ + id);
+  clock_gettime(CLOCK_REALTIME, __tmp_real_time__ + id);
 }
 
 void __chrono_stop__(int who, ChronoId id) {
   struct rusage final_value;
   struct timespec final_time;
   getrusage(who, &final_value);
-  clock_gettime(CLOCK_REALTIME_COARSE, &final_time);
+  clock_gettime(CLOCK_REALTIME, &final_time);
 
   TS_ADD_DIFF(__total_real_time__[id], __tmp_real_time__[id], final_time);
   TV_ADD_DIFF(__total_chrono__[id], __tmp_chrono__[id], final_value);
@@ -66,7 +66,7 @@ void diff_chrono_by_id(struct rusage *result, ChronoId id_start, ChronoId id_sto
 }
 
 void diff_chrono_by_obj(struct rusage *result, const struct rusage *start, const struct rusage *stop) {
-  clear_chrono_by_obj(result);
+  clear_chrono_by_obj(result, NULL);
   TV_ADD_DIFF(*result, *start, *stop);
   FIELD_ADD_DIFF(ru_minflt, *result, *start, *stop);
   FIELD_ADD_DIFF(ru_majflt, *result, *start, *stop);
@@ -74,9 +74,21 @@ void diff_chrono_by_obj(struct rusage *result, const struct rusage *start, const
   FIELD_ADD_DIFF(ru_oublock, *result, *start, *stop);
 }
 
-void clear_chrono_by_id(ChronoId id) { clear_chrono_by_obj(__total_chrono__ + id); }
+void clear_chrono_by_id(ChronoId id) { 
+  clear_chrono_by_obj(__total_chrono__ + id, __total_real_time__ + id); 
+}
 
-void clear_chrono_by_obj(struct rusage *chrono) { memset(chrono, 0, sizeof(struct rusage)); }
+void clear_all_chrono() { 
+  memset(__total_chrono__, 0, sizeof(struct rusage) * __CHRONO_LAST__); 
+  memset(__total_real_time__, 0, sizeof(struct timespec) * __CHRONO_LAST__); 
+}
+
+void clear_chrono_by_obj(struct rusage *chrono, struct timespec *real_time) { 
+  if(chrono)
+    memset(chrono, 0, sizeof(struct rusage)); 
+  if(real_time)
+    memset(real_time, 0, sizeof(struct timespec)); 
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 

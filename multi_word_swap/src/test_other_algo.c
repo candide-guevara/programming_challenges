@@ -31,7 +31,7 @@
   TestContent content_ = { 3, 3, 3 };                                                                                  \
   TestContent mswap_dst_[max_mswap_thr_] = {[0 ... max_mswap_thr_ - 1] = {.x = 111, .y = 222, .z = 333 } };            \
   HelpLockParams params_[max_mswap_thr_] = { {} };                                                                     \
-  type_swap_##field_name mswap_ = field_name##_swap_init(&content_);                                                   \
+  type_swap_##field_name mswap_ = field_name##_mswap_init(&content_);                                                   \
   for (uint32_t i = 0; i < max_mswap_thr_; ++i) {                                                                      \
     params_[i].field_name = mswap_;                                                                                    \
     params_[i].target = mswap_dst_ + i;                                                                                \
@@ -48,9 +48,9 @@
 #define PX_KICKOFF_WRITE_READ_THR(writers_, field_name, mswap_thr_, src_dst_, params_)                                 \
   pthread_t mswap_thr_[max_mswap_thr];                                                                                 \
   PX_FOREACH_MSWAP_THREAD(thr, src_dst_, params) {                                                                     \
-    void *(*thr_func)(void *) = field_name##_swap_write_in_loop;                                                       \
+    void *(*thr_func)(void *) = field_name##_mswap_write_in_loop;                                                       \
     if (thr >= writers_)                                                                                               \
-      thr_func = field_name##_swap_read_in_loop;                                                                       \
+      thr_func = field_name##_mswap_read_in_loop;                                                                       \
     int creation_ok = pthread_create(mswap_thr_ + thr, NULL, thr_func, PASTIFY(params_, _i));                          \
     TEST_ASSERT(creation_ok == 0, "Failed to create reader thread %d", thr);                                           \
   }
@@ -60,26 +60,26 @@
     for (TestContent *mswap_dst_##_i = mswap_dst_ + thr_; mswap_dst_##_i && __ir == thr_;)                             \
       for (HelpLockParams *params_##_i = params_ + thr_; params_##_i && __ir == thr_; ++__ir)
 
-THREAD_FUNCTION_PATTERN(mutex_swap_read, mutex, test_lock_reader_func)
-THREAD_FUNCTION_PATTERN(mutex_swap_write, mutex, test_lock_writer_func)
-THREAD_FUNCTION_PATTERN(spin_swap_read, spin, test_lock_reader_func)
-THREAD_FUNCTION_PATTERN(spin_swap_write, spin, test_lock_writer_func)
-THREAD_FUNCTION_PATTERN(rwlock_swap_read, rwlock, test_lock_reader_func)
-THREAD_FUNCTION_PATTERN(rwlock_swap_write, rwlock, test_lock_writer_func)
+THREAD_FUNCTION_PATTERN(mutex_mswap_read, mutex, test_lock_reader_func)
+THREAD_FUNCTION_PATTERN(mutex_mswap_write, mutex, test_lock_writer_func)
+THREAD_FUNCTION_PATTERN(spin_mswap_read, spin, test_lock_reader_func)
+THREAD_FUNCTION_PATTERN(spin_mswap_write, spin, test_lock_writer_func)
+THREAD_FUNCTION_PATTERN(rwlock_mswap_read, rwlock, test_lock_reader_func)
+THREAD_FUNCTION_PATTERN(rwlock_mswap_write, rwlock, test_lock_writer_func)
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-UNIT_TEST_START(test_mutex_swap_read_single)
+UNIT_TEST_START(test_mutex_mswap_read_single)
   PX_MSWAP_BOILER_PLATE(1, 1000, mutex, swap, read_dst, params);
   PX_KICKOFF_WRITE_READ_THR(0, mutex, swap_thr, read_dst, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
   PX_FOREACH_MSWAP_THREAD(thr, read_dst, params) {
     TEST_ASSERT(read_dst_i->x == 3 && read_dst_i->y == 3 && read_dst_i->z == 3, "Bad read");
   }
-  mutex_swap_clean(swap);
+  mutex_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_mutex_swap_write_single)
+UNIT_TEST_START(test_mutex_mswap_write_single)
   PX_MSWAP_BOILER_PLATE(1, 1000, mutex, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(1, mutex, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
@@ -87,10 +87,10 @@ UNIT_TEST_START(test_mutex_swap_write_single)
     TestContent *content = swap.content;
     TEST_ASSERT(content->x == 111 && content->y == 222 && content->z == 333, "Bad write");
   }
-  mutex_swap_clean(swap);
+  mutex_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_mutex_swap_mt_read_unblock)
+UNIT_TEST_START(test_mutex_mswap_mt_read_unblock)
   PX_MSWAP_BOILER_PLATE(1, 1, mutex, swap, read_dst, params);
   pthread_mutex_lock(params->mutex.mutex);
   PX_KICKOFF_WRITE_READ_THR(0, mutex, swap_thr, read_dst, params);
@@ -100,10 +100,10 @@ UNIT_TEST_START(test_mutex_swap_mt_read_unblock)
   }
   pthread_mutex_unlock(params->mutex.mutex);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  mutex_swap_clean(swap);
+  mutex_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_mutex_swap_mt_write_unblock)
+UNIT_TEST_START(test_mutex_mswap_mt_write_unblock)
   PX_MSWAP_BOILER_PLATE(1, 1, mutex, swap, write_src, params);
   pthread_mutex_lock(params->mutex.mutex);
   PX_KICKOFF_WRITE_READ_THR(1, mutex, swap_thr, write_src, params);
@@ -114,43 +114,43 @@ UNIT_TEST_START(test_mutex_swap_mt_write_unblock)
   }
   pthread_mutex_unlock(params->mutex.mutex);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  mutex_swap_clean(swap);
+  mutex_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_mutex_swap_mt_many_readers)
+UNIT_TEST_START(test_mutex_mswap_mt_many_readers)
   PX_MSWAP_BOILER_PLATE(6, 10000, mutex, swap, read_dst, params);
   PX_KICKOFF_WRITE_READ_THR(0, mutex, swap_thr, read_dst, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  mutex_swap_clean(swap);
+  mutex_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_mutex_swap_mt_many_writers)
+UNIT_TEST_START(test_mutex_mswap_mt_many_writers)
   PX_MSWAP_BOILER_PLATE(6, 10000, mutex, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(6, mutex, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  mutex_swap_clean(swap);
+  mutex_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_mutex_swap_mt_many_readers_writers)
+UNIT_TEST_START(test_mutex_mswap_mt_many_readers_writers)
   PX_MSWAP_BOILER_PLATE(6, 10000, mutex, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(3, mutex, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  mutex_swap_clean(swap);
+  mutex_mswap_clean(swap);
 UNIT_TEST_END
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-UNIT_TEST_START(test_spin_swap_read_single)
+UNIT_TEST_START(test_spin_mswap_read_single)
   PX_MSWAP_BOILER_PLATE(1, 1000, spin, swap, read_dst, params);
   PX_KICKOFF_WRITE_READ_THR(0, spin, swap_thr, read_dst, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
   PX_FOREACH_MSWAP_THREAD(thr, read_dst, params) {
     TEST_ASSERT(read_dst_i->x == 3 && read_dst_i->y == 3 && read_dst_i->z == 3, "Bad read");
   }
-  spin_swap_clean(swap);
+  spin_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_spin_swap_write_single)
+UNIT_TEST_START(test_spin_mswap_write_single)
   PX_MSWAP_BOILER_PLATE(1, 1000, spin, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(1, spin, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
@@ -158,10 +158,10 @@ UNIT_TEST_START(test_spin_swap_write_single)
     TestContent *content = swap.content;
     TEST_ASSERT(content->x == 111 && content->y == 222 && content->z == 333, "Bad write");
   }
-  spin_swap_clean(swap);
+  spin_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_spin_swap_mt_read_unblock)
+UNIT_TEST_START(test_spin_mswap_mt_read_unblock)
   PX_MSWAP_BOILER_PLATE(1, 1, spin, swap, read_dst, params);
   pthread_spin_lock(params->spin.mutex);
   PX_KICKOFF_WRITE_READ_THR(0, spin, swap_thr, read_dst, params);
@@ -171,10 +171,10 @@ UNIT_TEST_START(test_spin_swap_mt_read_unblock)
   }
   pthread_spin_unlock(params->spin.mutex);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  spin_swap_clean(swap);
+  spin_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_spin_swap_mt_write_unblock)
+UNIT_TEST_START(test_spin_mswap_mt_write_unblock)
   PX_MSWAP_BOILER_PLATE(1, 1, spin, swap, write_src, params);
   pthread_spin_lock(params->spin.mutex);
   PX_KICKOFF_WRITE_READ_THR(1, spin, swap_thr, write_src, params);
@@ -185,43 +185,43 @@ UNIT_TEST_START(test_spin_swap_mt_write_unblock)
   }
   pthread_spin_unlock(params->spin.mutex);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  spin_swap_clean(swap);
+  spin_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_spin_swap_mt_many_readers)
+UNIT_TEST_START(test_spin_mswap_mt_many_readers)
   PX_MSWAP_BOILER_PLATE(6, 10000, spin, swap, read_dst, params);
   PX_KICKOFF_WRITE_READ_THR(0, spin, swap_thr, read_dst, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  spin_swap_clean(swap);
+  spin_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_spin_swap_mt_many_writers)
+UNIT_TEST_START(test_spin_mswap_mt_many_writers)
   PX_MSWAP_BOILER_PLATE(6, 10000, spin, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(6, spin, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  spin_swap_clean(swap);
+  spin_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_spin_swap_mt_many_readers_writers)
+UNIT_TEST_START(test_spin_mswap_mt_many_readers_writers)
   PX_MSWAP_BOILER_PLATE(6, 10000, spin, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(3, spin, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  spin_swap_clean(swap);
+  spin_mswap_clean(swap);
 UNIT_TEST_END
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-UNIT_TEST_START(test_rwlock_swap_read_single)
+UNIT_TEST_START(test_rwlock_mswap_read_single)
   PX_MSWAP_BOILER_PLATE(1, 1000, rwlock, swap, read_dst, params);
   PX_KICKOFF_WRITE_READ_THR(0, rwlock, swap_thr, read_dst, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
   PX_FOREACH_MSWAP_THREAD(thr, read_dst, params) {
     TEST_ASSERT(read_dst_i->x == 3 && read_dst_i->y == 3 && read_dst_i->z == 3, "Bad read");
   }
-  rwlock_swap_clean(swap);
+  rwlock_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_rwlock_swap_write_single)
+UNIT_TEST_START(test_rwlock_mswap_write_single)
   PX_MSWAP_BOILER_PLATE(1, 1000, rwlock, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(1, rwlock, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
@@ -229,10 +229,10 @@ UNIT_TEST_START(test_rwlock_swap_write_single)
     TestContent *content = swap.content;
     TEST_ASSERT(content->x == 111 && content->y == 222 && content->z == 333, "Bad write");
   }
-  rwlock_swap_clean(swap);
+  rwlock_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_rwlock_swap_mt_read_unblock)
+UNIT_TEST_START(test_rwlock_mswap_mt_read_unblock)
   PX_MSWAP_BOILER_PLATE(1, 1, rwlock, swap, read_dst, params);
   pthread_rwlock_wrlock(params->rwlock.mutex);
   PX_KICKOFF_WRITE_READ_THR(0, rwlock, swap_thr, read_dst, params);
@@ -242,10 +242,10 @@ UNIT_TEST_START(test_rwlock_swap_mt_read_unblock)
   }
   pthread_rwlock_unlock(params->rwlock.mutex);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  rwlock_swap_clean(swap);
+  rwlock_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_rwlock_swap_mt_write_unblock)
+UNIT_TEST_START(test_rwlock_mswap_mt_write_unblock)
   PX_MSWAP_BOILER_PLATE(1, 1, rwlock, swap, write_src, params);
   pthread_rwlock_rdlock(params->rwlock.mutex);
   PX_KICKOFF_WRITE_READ_THR(1, rwlock, swap_thr, write_src, params);
@@ -256,28 +256,28 @@ UNIT_TEST_START(test_rwlock_swap_mt_write_unblock)
   }
   pthread_rwlock_unlock(params->rwlock.mutex);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  rwlock_swap_clean(swap);
+  rwlock_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_rwlock_swap_mt_many_readers)
+UNIT_TEST_START(test_rwlock_mswap_mt_many_readers)
   PX_MSWAP_BOILER_PLATE(6, 10000, rwlock, swap, read_dst, params);
   PX_KICKOFF_WRITE_READ_THR(0, rwlock, swap_thr, read_dst, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  rwlock_swap_clean(swap);
+  rwlock_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_rwlock_swap_mt_many_writers)
+UNIT_TEST_START(test_rwlock_mswap_mt_many_writers)
   PX_MSWAP_BOILER_PLATE(6, 10000, rwlock, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(6, rwlock, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  rwlock_swap_clean(swap);
+  rwlock_mswap_clean(swap);
 UNIT_TEST_END
 
-UNIT_TEST_START(test_rwlock_swap_mt_many_readers_writers)
+UNIT_TEST_START(test_rwlock_mswap_mt_many_readers_writers)
   PX_MSWAP_BOILER_PLATE(6, 10000, rwlock, swap, write_src, params);
   PX_KICKOFF_WRITE_READ_THR(3, rwlock, swap_thr, write_src, params);
   PX_JOIN_MSWAP_THREADS(swap_thr);
-  rwlock_swap_clean(swap);
+  rwlock_mswap_clean(swap);
 UNIT_TEST_END
 
 //////////////////////////////////////////////////////////////////////////////////////////////

@@ -18,10 +18,10 @@ typedef struct Swap_Mutex {
   void *content;
 } Swap_Mutex;
 
-Swap_Mutex mutex_swap_init(void *);
-void mutex_swap_clean(Swap_Mutex);
-int mutex_swap_read(Swap_Mutex, void *restrict, lock_content_reader);
-int mutex_swap_write(Swap_Mutex, void *restrict, lock_content_writer);
+Swap_Mutex mutex_mswap_init(void *);
+void mutex_mswap_clean(Swap_Mutex);
+int mutex_mswap_read(Swap_Mutex, void *restrict, lock_content_reader);
+int mutex_mswap_write(Swap_Mutex, void *restrict, lock_content_writer);
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -30,10 +30,10 @@ typedef struct Swap_Spin {
   void *content;
 } Swap_Spin;
 
-Swap_Spin spin_swap_init(void *);
-void spin_swap_clean(Swap_Spin);
-int spin_swap_read(Swap_Spin, void *restrict, lock_content_reader);
-int spin_swap_write(Swap_Spin, void *restrict, lock_content_writer);
+Swap_Spin spin_mswap_init(void *);
+void spin_mswap_clean(Swap_Spin);
+int spin_mswap_read(Swap_Spin, void *restrict, lock_content_reader);
+int spin_mswap_write(Swap_Spin, void *restrict, lock_content_writer);
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -42,9 +42,9 @@ typedef struct Swap_Rwlock {
   void *content;
 } Swap_Rwlock;
 
-Swap_Rwlock rwlock_swap_init(void *);
-void rwlock_swap_clean(Swap_Rwlock);
-int rwlock_swap_read(Swap_Rwlock, void *restrict, lock_content_reader);
-int rwlock_swap_write(Swap_Rwlock, void *restrict, lock_content_writer);
+Swap_Rwlock rwlock_mswap_init(void *);
+void rwlock_mswap_clean(Swap_Rwlock);
+int rwlock_mswap_read(Swap_Rwlock, void *restrict, lock_content_reader);
+int rwlock_mswap_write(Swap_Rwlock, void *restrict, lock_content_writer);
 
 //////////////////////////////////////////////////////////////////////////////////////////////

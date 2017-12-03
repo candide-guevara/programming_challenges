@@ -84,7 +84,37 @@ void __my_assert__(int condition);
 #define CHRONO_STOP(chrono_who, chrono_id)
 #endif
 
-#define CHRONOID_ENUM(XX) XX(__CHRONO_FIRST__), XX(__CHRONO_SECOND__), XX(__CHRONO_LAST__),
+// clang-format off
+#define CHRONOID_ENUM(XX)  \
+  XX(__CHRONO_FIRST__),    \
+  XX(CHRONO_ALL_BENCH),    \
+  XX(CHRONO_THREAD_0),     \
+  XX(CHRONO_THREAD_1),     \
+  XX(CHRONO_THREAD_2),     \
+  XX(CHRONO_THREAD_3),     \
+  XX(CHRONO_THREAD_4),     \
+  XX(CHRONO_THREAD_5),     \
+  XX(CHRONO_THREAD_6),     \
+  XX(CHRONO_THREAD_7),     \
+  XX(CHRONO_THREAD_8),     \
+  XX(CHRONO_THREAD_9),     \
+  XX(CHRONO_THREAD_10),    \
+  XX(CHRONO_THREAD_11),    \
+  XX(CHRONO_THREAD_12),    \
+  XX(CHRONO_THREAD_13),    \
+  XX(CHRONO_THREAD_14),    \
+  XX(CHRONO_THREAD_15),    \
+  XX(CHRONO_THREAD_16),    \
+  XX(CHRONO_THREAD_17),    \
+  XX(CHRONO_THREAD_18),    \
+  XX(CHRONO_THREAD_19),    \
+  XX(CHRONO_THREAD_20),    \
+  XX(CHRONO_THREAD_21),    \
+  XX(CHRONO_THREAD_22),    \
+  XX(CHRONO_THREAD_23),    \
+  XX(CHRONO_THREAD_24),    \
+  XX(__CHRONO_LAST__),
+// clang-format on
 
 #define TV_TO_SECS(elapsed) (double)(elapsed).tv_sec + (double)((elapsed).tv_usec) / 1000000
 #define TS_TO_SECS(elapsed) (double)(elapsed).tv_sec + (double)((elapsed).tv_nsec) / 1000000000
@@ -100,7 +130,8 @@ const struct timespec *get_real_time(ChronoId);
 void diff_chrono_by_id(struct rusage *, ChronoId, ChronoId);
 void diff_chrono_by_obj(struct rusage *, const struct rusage *, const struct rusage *);
 void clear_chrono_by_id(ChronoId);
-void clear_chrono_by_obj(struct rusage *);
+void clear_all_chrono();
+void clear_chrono_by_obj(struct rusage *, struct timespec *); 
 
 int chrono_header_to_csv(char *, int);
 int chrono_to_csv_by_id(char *, int, ChronoId);

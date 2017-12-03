@@ -3,6 +3,7 @@
 .PHONY: all .tags sanitize clean package hw_counters
 
 BIN_DIR := bin
+ETC_DIR := etc
 SRC_DIR := src
 INC_DIR := include
 
@@ -32,11 +33,26 @@ init_% :
 sanitize:
 	sanitizers=( -fsanitize=address -fsanitize=leak -fsanitize=thread -fsanitize=undefined )
 	for sanitizer in $${sanitizers[@]}; do
-		rm -rf $(BIN_DIR)/dbg
-		make dbg "compile_sanitize=-O1 $$sanitizer" "link_sanitize=$$sanitizer" || exit 1
+		make clean_dbg dbg "compile_sanitize=-O1 $$sanitizer" "link_sanitize=$$sanitizer" || exit 1
 		$(BIN_DIR)/dbg/project || exit 2
 	done
 	rm -rf $(BIN_DIR)/dbg
+
+benchmark:
+	explore_file=$(BIN_DIR)/bench_raw_explore.json
+	scale_file=$(BIN_DIR)/bench_raw_scale.json
+	analysis_name=$(BIN_DIR)/analysis.out
+	min_freq=`cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq`
+	cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
+	
+	bash $(ETC_DIR)/run_parametric_benchmark.sh --explore $$explore_file $(BIN_DIR)/opt/project
+	bash $(ETC_DIR)/run_parametric_benchmark.sh --scale   $$scale_file   $(BIN_DIR)/opt/project
+	
+	python3 $(ETC_DIR)/analyse_bench_raw_result.py \
+		--explore-file $$explore_file --scale-file $$scale_file \
+		--graph-out $${analysis_name}.svg \
+		> $$analysis_name
+	echo -n $$min_freq | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
 
 hw_counters : $(flavors)
 	cd $(BIN_DIR)
@@ -67,6 +83,9 @@ package :
 
 clean:
 	rm -rf $(BIN_DIR)/*
+
+clean_% :
+	rm -rf "$(BIN_DIR)/$*/"*
 
 %/project : $(addprefix %/, $(objects))
 	$(CC) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)

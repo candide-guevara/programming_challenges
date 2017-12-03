@@ -11,95 +11,63 @@
 #include <util.h>
 
 void main_run_benchmark() {
-  const uint32_t buf_init_len = 1024 * 1024;
-  char *buffer = calloc(1, buf_init_len);
+#if IS_ALL(BENCH_FUNCTION)
+  run_all_benchmark();
+#else
+  run_one_benchmark();
+#endif
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+void run_one_benchmark() {
+#if IS_ALL(BENCH_FUNCTION) != 1
   BenchThreadParams *params
       = build_bench_generic_params(BENCH_ALL_THR_COUNT, BENCH_ALL_THR_WAIT, BENCH_THREAD_ITERATIONS);
 
-  CHRONO_START(RUSAGE_SELF, __CHRONO_FIRST__);
+  CHRONO_START(RUSAGE_SELF, CHRONO_ALL_BENCH);
   for (uint32_t it = 0; it < BENCH_RERUN_COUNT; ++it)
     BENCH_FUNCTION(params, BENCH_ALL_THR_COUNT);
-  CHRONO_STOP(RUSAGE_SELF, __CHRONO_FIRST__);
+  CHRONO_STOP(RUSAGE_SELF, CHRONO_ALL_BENCH);
 
   free_bench_generic_params(params);
-
-  uint32_t written = write_bench_parameters(buffer, buf_init_len);
-  write_timing_results(__CHRONO_FIRST__, buffer+written, buf_init_len-written);
-  printf("%s", buffer);
-  free(buffer);
+  print_bench_result_as_json(BENCH_FUNCTION_STR, CHRONO_ALL_BENCH, BENCH_ALL_THR_COUNT);
+#endif
 }
 
-void main_run_benchmark_instrumented() {
-  const uint32_t buf_init_len = 1024 * 1024;
-  char *time_buffer = calloc(1, buf_init_len);
-  char *stat_buffer = calloc(1, buf_init_len);
+void run_all_benchmark() {
+  ENUMERATE_BENCHES(func_ptrs, func_names);
   BenchThreadParams *params
       = build_bench_generic_params(BENCH_ALL_THR_COUNT, BENCH_ALL_THR_WAIT, BENCH_THREAD_ITERATIONS);
 
-  CHRONO_START(RUSAGE_SELF, __CHRONO_FIRST__);
-  for (uint32_t it = 0, buf_start = 0, buf_len = buf_init_len; //
-       it < BENCH_RERUN_COUNT && buf_len <= buf_init_len;      //
-       ++it, buf_len -= buf_start)
-    buf_start += BENCH_FUNCTION_INST(params, BENCH_ALL_THR_COUNT, stat_buffer + buf_start, buf_len);
-  CHRONO_STOP(RUSAGE_SELF, __CHRONO_FIRST__);
+  for (uint32_t i = 0; i < sizeof(func_ptrs) / sizeof(void *); ++i) {
+    CHRONO_START(RUSAGE_SELF, CHRONO_ALL_BENCH);
+    for (uint32_t it = 0; it < BENCH_RERUN_COUNT; ++it)
+      func_ptrs[i](params, BENCH_ALL_THR_COUNT);
+    CHRONO_STOP(RUSAGE_SELF, CHRONO_ALL_BENCH);
 
-  produce_chrono_report(time_buffer, buf_init_len);
-  LOG_WARN("Results : \n%s\n%s", time_buffer, stat_buffer);
-  free_bench_generic_params(params);
-  free(stat_buffer);
-  free(time_buffer);
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-BENCH_MT_THREAD_FUNC_TEMPLATE(read)
-BENCH_MT_THREAD_FUNC_TEMPLATE(write)
-BENCH_PX_THREAD_FUNC_TEMPLATE(mutex, read)
-BENCH_PX_THREAD_FUNC_TEMPLATE(mutex, write)
-BENCH_PX_THREAD_FUNC_TEMPLATE(spin, read)
-BENCH_PX_THREAD_FUNC_TEMPLATE(spin, write)
-BENCH_PX_THREAD_FUNC_TEMPLATE(rwlock, read)
-BENCH_PX_THREAD_FUNC_TEMPLATE(rwlock, write)
-
-#define BENCH_SIMPLE_TEMPLATE(type_, read_func_, write_func_)                                                          \
-  MSWAP_Stat bench_##type_##_many_concurrent_readers(BenchThreadParams *params, uint32_t param_len) {                  \
-    pthread_t *bench_thrs = kick_off_bench_threads(params, param_len, read_func_);                                     \
-    MSWAP_Stat final_stats = join_with_bench_threads(params, bench_thrs, param_len);                                   \
-    free(bench_thrs);                                                                                                  \
-    return final_stats;                                                                                                \
-  }                                                                                                                    \
-                                                                                                                       \
-  MSWAP_Stat bench_##type_##_many_concurrent_writers(BenchThreadParams *params, uint32_t param_len) {                  \
-    pthread_t *bench_thrs = kick_off_bench_threads(params, param_len, write_func_);                                    \
-    MSWAP_Stat final_stats = join_with_bench_threads(params, bench_thrs, param_len);                                   \
-    free(bench_thrs);                                                                                                  \
-    return final_stats;                                                                                                \
-  }                                                                                                                    \
-                                                                                                                       \
-  MSWAP_Stat bench_##type_##_many_concurrent_rd_wr(BenchThreadParams *params, uint32_t param_len) {                    \
-    uint32_t read_count = param_len / 2;                                                                               \
-    uint32_t write_count = param_len - param_len / 2;                                                                  \
-    pthread_t *read_thrs = kick_off_bench_threads(params, read_count, read_func_);                                     \
-    pthread_t *write_thrs = kick_off_bench_threads(params + read_count, write_count, write_func_);                     \
-    MSWAP_Stat final_rd_stats = join_with_bench_threads(params, read_thrs, read_count);                                \
-    MSWAP_Stat final_wr_stats = join_with_bench_threads(params + read_count, write_thrs, write_count);                 \
-    free(read_thrs);                                                                                                   \
-    free(write_thrs);                                                                                                  \
-    mswap_stats_merge(&final_rd_stats, &final_wr_stats);                                                               \
-    return final_rd_stats;                                                                                             \
+    print_bench_result_as_json(func_names[i], CHRONO_ALL_BENCH, BENCH_ALL_THR_COUNT);
+    clear_all_chrono();
   }
 
-BENCH_SIMPLE_TEMPLATE(mswap, bench_read_thread_routine, bench_write_thread_routine)
-BENCH_SIMPLE_TEMPLATE(mutex, bench_mutex_read_thread_routine, bench_mutex_write_thread_routine)
-BENCH_SIMPLE_TEMPLATE(spin, bench_spin_read_thread_routine, bench_spin_write_thread_routine)
-BENCH_SIMPLE_TEMPLATE(rwlock, bench_rwlock_read_thread_routine, bench_rwlock_write_thread_routine)
+  free_bench_generic_params(params);
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t bench_mswap_instrumented_rd_wr(BenchThreadParams *params, uint32_t param_len, char *buffer,
-                                        uint32_t buffer_len) {
-  return 0;
-}
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(count, read)
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(count, write)
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(mutex, read)
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(mutex, write)
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(spin, read)
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(spin, write)
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(rwlock, read)
+BENCH_SIMPLE_THREAD_FUNC_TEMPLATE(rwlock, write)
+
+BENCH_SIMPLE_TEMPLATE(count)
+BENCH_SIMPLE_TEMPLATE(mutex)
+BENCH_SIMPLE_TEMPLATE(spin)
+BENCH_SIMPLE_TEMPLATE(rwlock)
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -123,9 +91,9 @@ BenchThreadParams *build_bench_generic_params(uint32_t param_len, uint32_t wait_
 #endif
 
   *mswap = build_mswap_count(content);
-  Swap_Mutex mutex = mutex_swap_init(content);
-  Swap_Spin spin = spin_swap_init(content);
-  Swap_Rwlock rwlock = rwlock_swap_init(content);
+  Swap_Mutex mutex = mutex_mswap_init(content);
+  Swap_Spin spin = spin_mswap_init(content);
+  Swap_Rwlock rwlock = rwlock_mswap_init(content);
 
   // memset no needed when using calloc, but memalign does not zero out
   memset(content, 0, content_slots_size);
@@ -133,7 +101,7 @@ BenchThreadParams *build_bench_generic_params(uint32_t param_len, uint32_t wait_
   memset(stats, 0, stats_size);
 
   for (uint32_t i = 0; i < param_len; ++i) {
-    params[i].mswap = mswap;
+    params[i].count = mswap;
     params[i].mutex = mutex;
     params[i].spin = spin;
     params[i].rwlock = rwlock;
@@ -141,6 +109,7 @@ BenchThreadParams *build_bench_generic_params(uint32_t param_len, uint32_t wait_
     params[i].stats = stats + i;
     params[i].wait_for = WAIT_QUANTUM * wait_for;
     params[i].iterations = iterations;
+    params[i].thread_idx = i;
   }
   return params;
 }
@@ -167,33 +136,31 @@ MSWAP_Stat join_with_bench_threads(BenchThreadParams *params, pthread_t *bench_t
 void free_bench_generic_params(BenchThreadParams *params) {
   free(params->stats);
   free(params->src_dst);
-  free_mswap_count(params->mswap);
-  rwlock_swap_clean(params->rwlock);
-  spin_swap_clean(params->spin);
-  mutex_swap_clean(params->mutex);
-  free(params->mswap);
+  free_mswap_count(params->count);
+  rwlock_mswap_clean(params->rwlock);
+  spin_mswap_clean(params->spin);
+  mutex_mswap_clean(params->mutex);
+  free(params->count);
   free(params);
 }
 
-uint32_t write_bench_parameters(char *buffer, uint32_t buf_len) {
-  const char *format_msg = "BENCH_RERUN_COUNT = %d\n"
-                           "BENCH_FUNCTION = %s\n"
-                           "BENCH_FUNCTION_INST = %s\n"
-                           "BENCH_FANCY_ALIGN = %d\n"
-                           "BENCH_ALL_THR_COUNT = %d\n"
-                           "BENCH_ALL_THR_WAIT = %d\n"
-                           "BENCH_THREAD_ITERATIONS = %d\n"
-                           "MAX_ACQUIRE_SWAP_ATTEMPTS = %d\n"
-                           "MAX_RELEASE_SWAP_ATTEMPTS = %d\n"
-                           "WAIT_QUANTUM = %d\n"
-                           "MORE_ATO_LESS_CONTENTION = %d\n"
-                           "MEMORY_ORDER_REL_LOCK = %d\n"
-                           "MEMORY_ORDER_ACQ_LOCK = %d\n"
-                           "\n";
-  return snprintf(buffer, buf_len, format_msg, BENCH_RERUN_COUNT, STRINGIFY(BENCH_FUNCTION),
-                  STRINGIFY(BENCH_FUNCTION_INST), BENCH_FANCY_ALIGN, BENCH_ALL_THR_COUNT, BENCH_ALL_THR_WAIT,
-                  BENCH_THREAD_ITERATIONS, MAX_ACQUIRE_SWAP_ATTEMPTS, MAX_RELEASE_SWAP_ATTEMPTS, WAIT_QUANTUM,
-                  MORE_ATO_LESS_CONTENTION, MEMORY_ORDER_REL_LOCK, MEMORY_ORDER_ACQ_LOCK);
+uint32_t write_bench_parameters(const char *func_name, char *buffer, uint32_t buf_len) {
+  const char *format_msg = "{\"BENCH_RERUN_COUNT\":%d,"
+                           "\"BENCH_FUNCTION\":\"%s\","
+                           "\"BENCH_FANCY_ALIGN\":%d,"
+                           "\"BENCH_ALL_THR_COUNT\":%d,"
+                           "\"BENCH_ALL_THR_WAIT\":%d,"
+                           "\"BENCH_THREAD_ITERATIONS\":%d,"
+                           "\"MAX_ACQUIRE_SWAP_ATTEMPTS\":%d,"
+                           "\"MAX_RELEASE_SWAP_ATTEMPTS\":%d,"
+                           "\"WAIT_QUANTUM\":%d,"
+                           "\"MORE_ATO_LESS_CONTENTION\":%d,"
+                           "\"MEMORY_ORDER_REL_LOCK\":\"%s\","
+                           "\"MEMORY_ORDER_ACQ_LOCK\":\"%s\"}";
+  return snprintf(buffer, buf_len, format_msg, BENCH_RERUN_COUNT, func_name,
+                  BENCH_FANCY_ALIGN, BENCH_ALL_THR_COUNT, BENCH_ALL_THR_WAIT, BENCH_THREAD_ITERATIONS,
+                  MAX_ACQUIRE_SWAP_ATTEMPTS, MAX_RELEASE_SWAP_ATTEMPTS, WAIT_QUANTUM, MORE_ATO_LESS_CONTENTION,
+                  STRINGIFY(MEMORY_ORDER_REL_LOCK), STRINGIFY(MEMORY_ORDER_ACQ_LOCK));
 }
 
 uint32_t write_timing_results(ChronoId chrono_id, char *buffer, uint32_t buf_len) {
@@ -202,8 +169,22 @@ uint32_t write_timing_results(ChronoId chrono_id, char *buffer, uint32_t buf_len
   double user_secs = TV_TO_SECS(chrono->ru_utime);
   double syst_secs = TV_TO_SECS(chrono->ru_stime);
   double real_secs = TS_TO_SECS(*time);
-  return snprintf(buffer, buf_len, "user_secs = %f\nsyst_secs = %f\nreal_secs = %f\n\n", 
-  user_secs, syst_secs, real_secs);
+  return snprintf(buffer, buf_len, "{\"user_secs\":%f,\"syst_secs\":%f,\"real_secs\":%f}", user_secs, syst_secs,
+                  real_secs);
+}
+
+void print_bench_result_as_json(const char *func_name, ChronoId chrono_id, uint32_t thread_len) {
+  char param_buf[4096], result_buf[4096], main_res_buf[1024];
+  write_bench_parameters(func_name, param_buf, sizeof(param_buf));
+  write_timing_results(chrono_id, main_res_buf, sizeof(main_res_buf));
+
+  uint32_t written = 0;
+  for (uint32_t i = 0; i < thread_len; ++i) {
+    written += write_timing_results(CHRONO_THREAD_0 + i, result_buf + written, sizeof(result_buf) - written);
+    result_buf[written++] = ',';
+  }
+  result_buf[--written] = '\0';
+  printf("{\"main\":%s,\"results\":[%s],\"params\":%s}\n", main_res_buf, result_buf, param_buf);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
