@@ -41,7 +41,7 @@ std::string my_format(const StatBuckets& stats) {
   auto ss = build_stringstream();
   ss << "{ min_cap=" << my_format(stats.min_cap) << " min_avail=" << my_format(stats.min_avail);
   ss << " max_cap=" <<  my_format(stats.max_cap) << " max_avail=" << my_format(stats.max_avail) << std::endl;
-  ss << " avg_cap=" << stats.avg_cap << " avg_avail=" << stats.avg_avail;
+  ss << " avg_avail=" << stats.avg_avail;
   ss << " std_cap=" << stats.std_cap << " std_avail=" << stats.std_avail << std::endl;
   ss << " tot_avail=" << stats.tot_avail << " tot_len=" << stats.tot_len ;
   ss << " }" << std::endl;

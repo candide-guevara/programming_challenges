@@ -6,6 +6,12 @@
 #include <utility>
 #include <cassert>
 
+#ifdef NDEBUG
+#define MY_ASSERT(x) do { (void)sizeof(x); } while (0)
+#else
+#define MY_ASSERT(x) assert(x)
+#endif
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 using comp_int_t = std::array<uint8_t,4>;
@@ -111,7 +117,9 @@ struct Buckets {
   uint32_t swap(uint32_t from, uint32_t to);
   uint32_t add_number(decimal_t decimal);
   uint32_t r_extend(uint32_t target, uint32_t amount);
+  uint32_t r_extend(uint32_t target, uint32_t amount, uint32_t prev);
   uint32_t extend(uint32_t target, uint32_t amount);
+  uint32_t extend(uint32_t target, uint32_t amount, uint32_t next);
   uint32_t rebalance(uint32_t amount);
 
   template<bool invert=false, class F>
@@ -147,7 +155,7 @@ size_t compress_len(comp_int_t comp);
 int_len_t decompress(uint8_t* start, uint8_t bit_offset);
 uint32_t decompress(comp_int_t comp);
 
-void order_numbers_into_buckets(Buckets& buckets, const std::vector<decimal_t>& input);
+Buckets order_numbers_into_buckets(const std::vector<decimal_t>& input);
 uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal);
 
 using strategy_t = uint32_t(*)(Buckets&, decimal_t);

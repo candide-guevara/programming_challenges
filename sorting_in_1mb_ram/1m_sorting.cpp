@@ -6,13 +6,12 @@
 #include <iostream>
 #include <numeric>
 #include <cmath>
-#pragma GCC diagnostic ignored "-Wunused-variable"
 
 using namespace std;
 
 BucketIt::reference BucketIt::operator *() {
   auto int_len = decompress(start, bit_offset);
-  assert(8*(end - start) >= bit_offset+int_len.second);
+  MY_ASSERT(8*(end - start) >= bit_offset+int_len.second);
   value = int_len.first;
   return value;
 }
@@ -21,7 +20,7 @@ int_len_t BucketIt::get_and_advance() {
   auto int_len = decompress(start, bit_offset);
   start += (bit_offset+int_len.second) / 8;
   bit_offset = (bit_offset+int_len.second) % 8;
-  assert(start <= end);
+  MY_ASSERT(start <= end);
   return int_len;
 }
 
@@ -46,17 +45,17 @@ BucketIt BucketIt::operator ++(int) {
 }
 
 bool BucketIt::operator==(const BucketIt& rhs) const {
-  assert(end == rhs.end);
+  MY_ASSERT(end == rhs.end);
   return (start == rhs.start) && (bit_offset == rhs.bit_offset);
 }
 
 bool BucketIt::operator!=(const BucketIt& rhs) const {
-  assert(end == rhs.end);
+  MY_ASSERT(end == rhs.end);
   return (start != rhs.start) || (bit_offset != rhs.bit_offset);
 }
 
 int32_t BucketIt::operator-(const BucketIt& rhs) const {
-  assert(end == rhs.end);
+  MY_ASSERT(end == rhs.end);
   return 8 * (start - rhs.start) + (bit_offset - rhs.bit_offset);
 }
 
@@ -82,8 +81,8 @@ BucketIt Buckets::begin(uint32_t idx) const {
   uint8_t *start = starts[idx];
   uint8_t *end = ends[idx];
   BucketIt it {start, end, 0};
-  assert(it.start >= buffer.data() && it.start <= it.end);
-  assert(it.end <= buffer.data() + buffer.size());
+  MY_ASSERT(it.start >= buffer.data() && it.start <= it.end);
+  MY_ASSERT(it.end <= buffer.data() + buffer.size());
   return it;
 }
 
@@ -91,8 +90,8 @@ BucketIt Buckets::end(uint32_t idx) const {
   uint8_t *start = starts[idx];
   uint8_t *end = ends[idx];
   BucketIt it {start + lens[idx]/8, end, static_cast<uint8_t>(lens[idx]%8)};
-  assert(it.start >= buffer.data() && it.start <= it.end);
-  assert(it.end <= buffer.data() + buffer.size());
+  MY_ASSERT(it.start >= buffer.data() && it.start <= it.end);
+  MY_ASSERT(it.end <= buffer.data() + buffer.size());
   return it;
 }
 
@@ -131,7 +130,7 @@ uint32_t Buckets::capacity(uint32_t target) const {
 
 uint32_t Buckets::available(uint32_t target) const {
   uint32_t avail =  8*(ends[target] - starts[target]) - lens[target];
-  assert((int32_t)avail > -1);
+  MY_ASSERT((int32_t)avail > -1);
   return avail;
 }
 
@@ -168,7 +167,7 @@ StatBuckets Buckets::calculate_stats() const {
 void Buckets::update(uint32_t idx, BucketIt it) {
   uint8_t *start = starts[idx];
   lens[idx] = 8 * (it.start - start) + it.bit_offset;
-  assert(lens[idx] <= 8 *(ends[idx] - start));
+  MY_ASSERT(lens[idx] <= 8 *(ends[idx] - start));
 }
 
 void Buckets::clear() {
@@ -181,14 +180,19 @@ void Buckets::clear() {
 }
 
 uint32_t Buckets::r_extend(uint32_t target, uint32_t amount) {
-  assert(amount);
   uint32_t prev_idx = prev_contiguous(target);
+  return r_extend(target, amount, prev_idx);
+}
+
+uint32_t Buckets::r_extend(uint32_t target, uint32_t amount, uint32_t prev_idx) {
+  MY_ASSERT(amount);
+  MY_ASSERT(prev_idx == prev_contiguous(target));
   if (prev_idx == Buckets::bucket_len)
     return make_ov_error(amount);
 
   uint32_t avail = available(prev_idx) / 8;
-  if(avail <= amount)
-    return make_ov_error(std::max(amount - avail, 1u));
+  if(avail < amount)
+    return make_ov_error(amount - avail);
 
   uint8_t* new_start = starts[target] - amount;
   uint8_t* end_copy = starts[target] + byte_len(target);
@@ -200,14 +204,19 @@ uint32_t Buckets::r_extend(uint32_t target, uint32_t amount) {
 }
 
 uint32_t Buckets::extend(uint32_t target, uint32_t amount) {
-  assert(amount);
   uint32_t next_idx = next_contiguous(target);
+  return extend(target, amount, next_idx);
+}
+
+uint32_t Buckets::extend(uint32_t target, uint32_t amount, uint32_t next_idx) {
+  MY_ASSERT(amount);
+  MY_ASSERT(next_idx == next_contiguous(target));
   if (next_idx == Buckets::bucket_len)
     return make_ov_error(amount);
 
   uint32_t avail = available(next_idx) / 8;
-  if(avail <= amount)
-    return make_ov_error(std::max(amount - avail, 1u));
+  if(avail < amount)
+    return make_ov_error(amount - avail);
 
   uint8_t* new_start = starts[next_idx] + amount;
   uint8_t* end_copy = starts[next_idx] + byte_len(next_idx);
@@ -219,7 +228,7 @@ uint32_t Buckets::extend(uint32_t target, uint32_t amount) {
 }
 
 uint32_t Buckets::swap(uint32_t from, uint32_t to) {
-  assert(from != to);
+  MY_ASSERT(from != to);
   int32_t extra_len = std::min(capacity(from) - lens[to], capacity(to) - lens[from]);
   if(extra_len < 0)
     return make_ov_error(-extra_len);
@@ -265,7 +274,7 @@ uint32_t Buckets::add_number(decimal_t decimal) {
     if(ov_count > 0)
       return make_ov_error(ov_count);
 
-    assert(delta < sum && next <= sum && extra_len <= (int32_t)comp_len_4);
+    MY_ASSERT(delta < sum && next <= sum && extra_len <= (int32_t)comp_len_4);
     deque<uint32_t> buffer = { delta, next };
 
     for(uint32_t i=2; i < safe_buf_len && read_it != bucket_end; ++i)
@@ -287,7 +296,7 @@ uint32_t Buckets::rebalance(uint32_t amount) {
   uint32_t moved = 0;
   auto current = std::find(starts.begin(), starts.end(), buffer.data());
   auto next = current;
-  assert(current != starts.end());
+  MY_ASSERT(current != starts.end());
 
   while(true) {
     uint32_t idx = std::distance(starts.begin(), current);
@@ -300,8 +309,8 @@ uint32_t Buckets::rebalance(uint32_t amount) {
 
     if(extend_by) {
       uint32_t next_idx = std::distance(starts.begin(), next);
-      uint32_t ok = r_extend(next_idx, extend_by);
-      assert(!overflow_count(ok));
+      uint32_t ok = r_extend(next_idx, extend_by, idx);
+      MY_ASSERT(!overflow_count(ok));
       moved += extend_by;
     }
     current = next;
@@ -322,7 +331,7 @@ GlobalIt& GlobalIt::operator++() {
     internal_it = buckets->begin(cur_bucket);
     value = bucket_int_to_decimal(make_pair(cur_bucket, 0));
   }
-  assert(cur_bucket == Buckets::bucket_len || internal_it != buckets->end(cur_bucket));
+  MY_ASSERT(cur_bucket == Buckets::bucket_len || internal_it != buckets->end(cur_bucket));
 
   if(cur_bucket != Buckets::bucket_len) 
     value.first += *internal_it;
@@ -369,7 +378,7 @@ bucket_int_t decimal_to_bucket_int(decimal_t decimal) {
   bucket_int.first = (decimal.second * bucket_family_len) + (decimal.first / bucket_val_mask);
   bucket_int.second = decimal.first % bucket_val_mask;
 
-  assert(bucket_int.first < Buckets::bucket_len);
+  MY_ASSERT(bucket_int.first < Buckets::bucket_len);
   return bucket_int;
 }
 
@@ -378,17 +387,18 @@ decimal_t bucket_int_to_decimal(bucket_int_t bucket_int) {
   decimal.first = bucket_int.second + (bucket_int.first % bucket_family_len) * bucket_val_mask;
   decimal.second = bucket_int.first / bucket_family_len;
 
-  assert(decimal.first < rand_msk && decimal.second < decimal_places);
+  MY_ASSERT(decimal.first < rand_msk && decimal.second < decimal_places);
   return decimal;
 }
 
 bool comp_decimal(decimal_t lhs, decimal_t rhs) {
   return (lhs.second < rhs.second)
          || (lhs.second == rhs.second && lhs.first < rhs.first);
+  //return lhs.first * pow(10, -lhs.second) < rhs.first * pow(10, -rhs.second);
 }
 
 uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, uint8_t* end) {
-  assert(bit_offset < 8);
+  MY_ASSERT(bit_offset < 8);
   auto comp = compress(number);
   int32_t extra_len = bit_offset + compress_len(comp) - 8*(end - start);
 
@@ -453,7 +463,7 @@ uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, u
 }
 
 comp_int_t compress(uint32_t number) {
-  assert(number < comp_max_4);
+  MY_ASSERT(number < comp_max_4);
   comp_int_t comp;
   int32_t biased = number - bias;
   uint32_t zigzag = (biased >> 31) ^ (biased << 1);
@@ -464,20 +474,20 @@ comp_int_t compress(uint32_t number) {
   else if(zigzag < comp_max_2) {
     comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
     comp[1] = ((zigzag >> 7) & 0x3f);
-    assert(comp[0] > 0);
+    MY_ASSERT(comp[0] > 0);
   }
   else if(zigzag < comp_max_3) {
     comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
     comp[1] = ((zigzag >> 7) & 0x3f) | 0x40 | ((zigzag >> 6) & 0x80);
     comp[2] = (zigzag >> 14) & 0x7f;
-    assert(comp[0] > 0 && comp[1] > 0);
+    MY_ASSERT(comp[0] > 0 && comp[1] > 0);
   }
   else {
     comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
     comp[1] = ((zigzag >> 7) & 0x3f) | 0x40 | ((zigzag >> 6) & 0x80);
     comp[2] = ((zigzag >> 14) & 0x7f) | 0x80;
     comp[3] = (zigzag >> 21) & 0xff;
-    assert(comp[0] > 0 && comp[1] > 0 && comp[2] > 0);
+    MY_ASSERT(comp[0] > 0 && comp[1] > 0 && comp[2] > 0);
   }
   return comp;
 }
@@ -530,14 +540,14 @@ int_len_t decompress(uint8_t* start, uint8_t bit_offset) {
 uint32_t decompress(comp_int_t comp) {
   if((comp[0] & 0x40) == 0) {
     int32_t zigzag = comp[0] & 0x3f;
-    assert((uint32_t)zigzag < comp_max_1);
+    MY_ASSERT((uint32_t)zigzag < comp_max_1);
     zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
     return zigzag + bias;
   }
   if((comp[1] & 0x40) == 0) {
     int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
     zigzag         |= ((comp[1] >> 1) & 0x1f) << 8;
-    assert((uint32_t)zigzag < comp_max_2);
+    MY_ASSERT((uint32_t)zigzag < comp_max_2);
     zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
     return zigzag + bias;
   }
@@ -545,12 +555,12 @@ uint32_t decompress(comp_int_t comp) {
     int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
     zigzag         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
     zigzag         |= ( ((comp[2] >> 2) & 0x1f) ) << 16;
-    assert((uint32_t)zigzag < comp_max_3);
+    MY_ASSERT((uint32_t)zigzag < comp_max_3);
     zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
     return zigzag + bias;
   }
   else {
-    assert(comp[3] > 0);
+    MY_ASSERT(comp[3] > 0);
     int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
     zigzag         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
     zigzag         |= ( ((comp[2] >> 2) & 0x1f) | ((comp[3] << 5) & 0xe0) ) << 16;
@@ -569,16 +579,15 @@ uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal) {
     add_rebalance_strategy_2,
     add_rebalance_strategy_3,
   };
-  uint32_t ok;
+  uint32_t ok = make_ov_error(1);
 
   for(auto strat : add_strats) {
     ok = strat(buckets, decimal);
     if(!overflow_count(ok)) break;
   }
   if(overflow_count(ok)) {
-    LOG(my_format(buckets.calculate_stats()));
-    uint32_t moved = buckets.rebalance(safe_buf_len);
-    LOG(my_format(buckets.calculate_stats()));
+    /*uint32_t moved = */buckets.rebalance(safe_buf_len);
+    //LOG("after balance : moved=" << moved << " stats=" << my_format(buckets.calculate_stats()));
     for(auto strat : add_strats) {
       ok = strat(buckets, decimal);
       if(!overflow_count(ok)) break;
@@ -606,7 +615,7 @@ uint32_t add_rebalance_strategy_1(Buckets& buckets, decimal_t decimal) {
   }
   if(!overflow_count(ok)) {
     ok = buckets.add_number(decimal);
-    assert(!overflow_count(ok));
+    MY_ASSERT(!overflow_count(ok));
   }
   return ok;
 }
@@ -625,9 +634,9 @@ uint32_t add_rebalance_strategy_2(Buckets& buckets, decimal_t decimal) {
     ok = make_ov_error(1);
   else {
     ok = buckets.swap(swap_idx, bucket_int.first);
-    assert(!overflow_count(ok));
+    MY_ASSERT(!overflow_count(ok));
     ok = buckets.add_number(decimal);
-    assert(!overflow_count(ok));
+    MY_ASSERT(!overflow_count(ok));
   }
   STRAT_LOG(2, "decimal=" << my_format(decimal) << " ov_count=" << ok
       << " bucket_int=" << my_format(bucket_int) << " swap_idx=" << swap_idx);
@@ -639,7 +648,7 @@ uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal) {
   uint32_t ok = make_ov_error(1);
   auto bucket_int = decimal_to_bucket_int(decimal);
   
-  auto side_strat = [&buckets, &decimal, &bucket_int, &ok] (uint32_t cont_idx, function<uint32_t()> func) {
+  auto side_strat = [&buckets, &decimal, /*&bucket_int,*/ &ok] (uint32_t cont_idx, function<uint32_t()> func) {
     uint32_t target_len = buckets.lens[cont_idx] - 8*safe_bucket_inc;
     uint32_t swap_idx = buckets.select_first([&](uint32_t i) { 
       return i != cont_idx && buckets.lens[i] <= target_len && buckets.lens[cont_idx] <= buckets.capacity(i);
@@ -649,11 +658,11 @@ uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal) {
       ok = make_ov_error(1);
     else {
       ok = buckets.swap(swap_idx, cont_idx);
-      assert(!overflow_count(ok));
+      MY_ASSERT(!overflow_count(ok));
       ok = func();
-      assert(!overflow_count(ok));
+      MY_ASSERT(!overflow_count(ok));
       ok = buckets.add_number(decimal);
-      assert(!overflow_count(ok));
+      MY_ASSERT(!overflow_count(ok));
     }
     STRAT_LOG(3, "decimal=" << my_format(decimal) << " ov_count=" << ok
         << " bucket_int=" << my_format(bucket_int) << " cont_idx=" << cont_idx << " swap_idx=" << swap_idx);
@@ -661,15 +670,29 @@ uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal) {
 
   uint32_t cont_idx = buckets.prev_contiguous(bucket_int.first);
   if (cont_idx != Buckets::bucket_len)
-    side_strat(cont_idx, [&]() { return buckets.r_extend(bucket_int.first, safe_bucket_inc); });
+    side_strat(cont_idx, [&]() { return buckets.r_extend(bucket_int.first, safe_bucket_inc, cont_idx); });
   if(overflow_count(ok)) {
     cont_idx = buckets.next_contiguous(bucket_int.first);
     if (cont_idx != Buckets::bucket_len)
-      side_strat(cont_idx, [&]() { return buckets.extend(bucket_int.first, safe_bucket_inc); });
+      side_strat(cont_idx, [&]() { return buckets.extend(bucket_int.first, safe_bucket_inc, cont_idx); });
   }
   return ok;
 }
 
-void order_numbers_into_buckets(Buckets& buckets, const vector<decimal_t>& input) {
+Buckets order_numbers_into_buckets(const vector<decimal_t>& input) {
+  Buckets buckets = build_buckets();
+  uint32_t count = 0;
+  for(auto decimal : input) {
+    uint32_t ok = add_rebalance_if_needed(buckets, decimal);
+    if(overflow_count(ok)) {
+      LOG("failed to add : " << my_format(decimal));
+      LOG("stats : " << my_format(buckets.calculate_stats()));
+      assert(false);
+    }
+    //if(count % (input_len/20) == 0)
+    //  LOG("buckets stats (" << count << ") = " << my_format(buckets.calculate_stats()));
+    ++count;
+  }
+  return buckets;
 }
 
