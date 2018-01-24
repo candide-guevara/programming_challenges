@@ -5,7 +5,7 @@ using namespace std;
 uint32_t Buckets::_r_extend(uint32_t target, uint32_t amount) {
   MY_ASSERT(amount);
   uint32_t prev_idx = prev_contiguous(target);
-  if (prev_idx == Buckets::bucket_len)
+  if (prev_idx == bucket_len)
     return make_ov_error(amount);
   auto prev_end_it = end(prev_idx);
 

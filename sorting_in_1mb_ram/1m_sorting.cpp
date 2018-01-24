@@ -63,14 +63,14 @@ int32_t operator-(uint8_t* lhs, const BucketIt& rhs) {
   return 8 * (lhs - rhs.start) - rhs.bit_offset;
 }
 
-ItContainer<BucketIt> Buckets::at(uint32_t idx) {
+ItContainer<BucketIt> Buckets::at(uint32_t idx) const {
   auto it_start = begin(idx);
   auto it_end = end(idx);
   ItContainer<BucketIt> b { it_start, it_end };
   return b;
 }
 
-ItContainer<GlobalIt> Buckets::global_at() {
+ItContainer<GlobalIt> Buckets::global_at() const {
   auto it_start = global_begin();
   auto it_end = global_end();
   ItContainer<GlobalIt> b { it_start, it_end };
@@ -98,7 +98,7 @@ BucketIt Buckets::end(uint32_t idx) const {
 GlobalIt Buckets::global_begin() const {
   auto it = std::upper_bound(lens.begin(), lens.end(), 0);
   uint32_t idx = (uint32_t)std::distance(lens.begin(), it);
-  if(idx == Buckets::bucket_len)
+  if(idx == bucket_len)
     return GlobalIt{this, idx};
 
   auto global_it = GlobalIt{this, idx, begin(idx)};
@@ -142,12 +142,15 @@ StatBuckets Buckets::calculate_stats() const {
   auto tot_avail = Buckets::accumulate([this](uint32_t i) { return available(i); }, 0u);
   auto avg_cap = Buckets::accumulate([this](uint32_t i) { return capacity(i); }, 0.0) / bucket_len;
   auto avg_avail = (double)tot_avail / bucket_len;
-  auto std_cap = Buckets::accumulate([this, avg_cap](uint32_t i) { 
-    return (avg_cap - capacity(i))*(avg_cap - capacity(i)); 
-  }, 0.0) / bucket_len;
-  auto std_avail = Buckets::accumulate([this, avg_avail](uint32_t i) { 
-    return (avg_avail - available(i))*(avg_avail - available(i)); 
-  }, 0.0) / bucket_len;
+  auto std_avail = 0.0, std_cap = 0.0;
+  StatBuckets::Histo len_histo;
+
+  for(uint32_t i=0; i < bucket_len; ++i) {
+    std_cap   += (avg_cap - capacity(i))*(avg_cap - capacity(i)); 
+    std_avail += (avg_avail - available(i))*(avg_avail - available(i)); 
+    for(auto val : at(i)) 
+      ++len_histo[compress_len(val)];
+  }
   
   StatBuckets stats = {
     select_bigger<true>([this](uint32_t i) { return capacity(i); }),
@@ -156,10 +159,11 @@ StatBuckets Buckets::calculate_stats() const {
     select_bigger([this](uint32_t i) { return available(i); }),
     avg_cap,
     avg_avail,
-    std::sqrt(std_cap),
-    std::sqrt(std_avail),
+    std::sqrt(std_cap / buffer_len),
+    std::sqrt(std_avail / bucket_len),
     std::accumulate(lens.begin(), lens.end(), 0u),
     tot_avail,
+    std::move(len_histo),
   };
   return stats;
 }
@@ -171,12 +175,12 @@ void Buckets::update(uint32_t idx, BucketIt it) {
 }
 
 void Buckets::clear() {
-  for(uint32_t i=0; i<Buckets::bucket_len; ++i) {
-    starts[i] = buffer.data() + i * (Buckets::buffer_len/Buckets::bucket_len);
-    ends[i] = buffer.data() + (1+i) * (Buckets::buffer_len/Buckets::bucket_len);
+  for(uint32_t i=0; i<bucket_len; ++i) {
+    starts[i] = buffer.data() + i * (buffer_len/bucket_len);
+    ends[i] = buffer.data() + (1+i) * (buffer_len/bucket_len);
     lens[i] = 0;
   }
-  ends[Buckets::bucket_len-1] = buffer.data() + Buckets::buffer_len;
+  ends[bucket_len-1] = buffer.data() + buffer_len;
 }
 
 uint32_t Buckets::r_extend(uint32_t target, uint32_t amount) {
@@ -187,7 +191,7 @@ uint32_t Buckets::r_extend(uint32_t target, uint32_t amount) {
 uint32_t Buckets::r_extend(uint32_t target, uint32_t amount, uint32_t prev_idx) {
   MY_ASSERT(amount);
   MY_ASSERT(prev_idx == prev_contiguous(target));
-  if (prev_idx == Buckets::bucket_len)
+  if (prev_idx == bucket_len)
     return make_ov_error(amount);
 
   uint32_t avail = available(prev_idx) / 8;
@@ -211,7 +215,7 @@ uint32_t Buckets::extend(uint32_t target, uint32_t amount) {
 uint32_t Buckets::extend(uint32_t target, uint32_t amount, uint32_t next_idx) {
   MY_ASSERT(amount);
   MY_ASSERT(next_idx == next_contiguous(target));
-  if (next_idx == Buckets::bucket_len)
+  if (next_idx == bucket_len)
     return make_ov_error(amount);
 
   uint32_t avail = available(next_idx) / 8;
@@ -292,8 +296,8 @@ uint32_t Buckets::add_number(decimal_t decimal) {
   }
 }
 
-uint32_t Buckets::rebalance(uint32_t amount) {
-  uint32_t moved = 0;
+uint32_t Buckets::rebalance(uint32_t min_distrib) {
+  int32_t extend_by = 0;
   auto current = std::find(starts.begin(), starts.end(), buffer.data());
   auto next = current;
   MY_ASSERT(current != starts.end());
@@ -304,18 +308,92 @@ uint32_t Buckets::rebalance(uint32_t amount) {
     if(next == starts.end())
       break;
 
-    int32_t extend_by = (ends[idx] - starts[idx]) - byte_len(idx) - amount;
-    extend_by = extend_by < 0 ? 0 : extend_by;
+    // we use max to avoid collapsing start with end 
+    extend_by = (ends[idx] - starts[idx]) - std::max(1u, byte_len(idx));
+    MY_ASSERT(extend_by >= 0);
 
     if(extend_by) {
       uint32_t next_idx = std::distance(starts.begin(), next);
       uint32_t ok = r_extend(next_idx, extend_by, idx);
       MY_ASSERT(!overflow_count(ok));
-      moved += extend_by;
     }
     current = next;
   }
-  return moved;
+
+  uint32_t distribute = std::max((size_t)min_distrib, extend_by / bucket_len);
+  current = std::find(ends.begin(), ends.end(), buffer.data()+buffer_len);
+  next = current;
+  MY_ASSERT(current != ends.end());
+
+  while(distribute) {
+    uint32_t idx = std::distance(ends.begin(), current);
+    next = std::find(ends.begin(), ends.end(), starts[idx]);
+    extend_by = (ends[idx] - starts[idx]) - byte_len(idx) - distribute;
+    if(next == ends.end() || extend_by < 1)
+      break;
+
+    uint32_t next_idx = std::distance(ends.begin(), next);
+    uint32_t ok = extend(next_idx, extend_by, idx);
+    MY_ASSERT(!overflow_count(ok));
+    current = next;
+  }
+  return distribute;
+}
+
+uint32_t Buckets::steal_expand(uint32_t target, uint32_t max_expand) {
+  const int32_t steal = 1;
+  int32_t extend_left = 0, extend_right = 0;
+  auto current = std::find(ends.begin(), ends.end(), buffer.data()+buffer_len);
+  auto next = current;
+  MY_ASSERT(current != ends.end());
+  uint32_t idx = std::distance(ends.begin(), current);
+  int32_t margin = (ends[idx] - starts[idx]) - byte_len(idx);
+
+  while(true) {
+    extend_right += (margin > steal ? steal : 0);
+    next = std::find(ends.begin(), ends.end(), starts[idx]);
+    MY_ASSERT(next != ends.end());
+    uint32_t next_idx = std::distance(ends.begin(), next);
+    int32_t next_margin = (ends[next_idx] - starts[next_idx]) - byte_len(next_idx);
+
+    if(extend_right) {
+      uint32_t ok = extend(next_idx, extend_right, idx);
+      MY_ASSERT(!overflow_count(ok));
+    }
+    if(next_idx == target)
+      break;
+    current = next;
+    idx = next_idx;
+    margin = next_margin;
+  }
+
+  if((uint32_t)extend_right >= max_expand)
+    return extend_right;
+
+  current = std::find(starts.begin(), starts.end(), buffer.data());
+  next = current;
+  MY_ASSERT(current != starts.end());
+  idx = std::distance(starts.begin(), current);
+  margin = (ends[idx] - starts[idx]) - byte_len(idx);
+
+  while(true) {
+    extend_left += (margin > steal ? steal : 0);
+    next = std::find(starts.begin(), starts.end(), ends[idx]);
+    MY_ASSERT(next != starts.end());
+    uint32_t next_idx = std::distance(starts.begin(), next);
+    int32_t next_margin = (ends[next_idx] - starts[next_idx]) - byte_len(next_idx);
+
+    if(extend_left) {
+      uint32_t ok = r_extend(next_idx, extend_left, idx);
+      MY_ASSERT(!overflow_count(ok));
+    }
+    if(next_idx == target)
+      break;
+    current = next;
+    idx = next_idx;
+    margin = next_margin;
+  }
+  return extend_left + extend_right;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -327,13 +405,13 @@ GlobalIt::reference GlobalIt::operator*() {
 GlobalIt& GlobalIt::operator++() {
   ++internal_it;
   while(internal_it == buckets->end(cur_bucket) 
-        && ++cur_bucket < Buckets::bucket_len) {
+        && ++cur_bucket < bucket_len) {
     internal_it = buckets->begin(cur_bucket);
     value = bucket_int_to_decimal(make_pair(cur_bucket, 0));
   }
-  MY_ASSERT(cur_bucket == Buckets::bucket_len || internal_it != buckets->end(cur_bucket));
+  MY_ASSERT(cur_bucket == bucket_len || internal_it != buckets->end(cur_bucket));
 
-  if(cur_bucket != Buckets::bucket_len) 
+  if(cur_bucket != bucket_len) 
     value.first += *internal_it;
   return *this;
 }
@@ -345,7 +423,7 @@ GlobalIt GlobalIt::operator++(int) {
 }
 
 bool GlobalIt::operator==(const GlobalIt& rhs) const {
-  return (cur_bucket == Buckets::bucket_len && cur_bucket == rhs.cur_bucket)
+  return (cur_bucket == bucket_len && cur_bucket == rhs.cur_bucket)
     || (cur_bucket == rhs.cur_bucket && internal_it == rhs.internal_it);
 }
 
@@ -357,10 +435,10 @@ bool GlobalIt::operator!=(const GlobalIt& rhs) const {
 
 Buckets build_buckets() {
   Buckets buckets;
-  buckets.buffer.resize(Buckets::buffer_len, 0);
-  buckets.starts.resize(Buckets::bucket_len, nullptr);
-  buckets.ends.resize  (Buckets::bucket_len, nullptr);
-  buckets.lens.resize  (Buckets::bucket_len, 0);
+  buckets.buffer.resize(buffer_len, 0);
+  buckets.starts.resize(bucket_len, nullptr);
+  buckets.ends.resize  (bucket_len, nullptr);
+  buckets.lens.resize  (bucket_len, 0);
   buckets.clear();
   return buckets;
 }
@@ -378,7 +456,7 @@ bucket_int_t decimal_to_bucket_int(decimal_t decimal) {
   bucket_int.first = (decimal.second * bucket_family_len) + (decimal.first / bucket_val_mask);
   bucket_int.second = decimal.first % bucket_val_mask;
 
-  MY_ASSERT(bucket_int.first < Buckets::bucket_len);
+  MY_ASSERT(bucket_int.first < bucket_len);
   return bucket_int;
 }
 
@@ -586,12 +664,13 @@ uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal) {
     if(!overflow_count(ok)) break;
   }
   if(overflow_count(ok)) {
-    /*uint32_t moved = */buckets.rebalance(safe_buf_len);
-    //LOG("after balance : moved=" << moved << " stats=" << my_format(buckets.calculate_stats()));
-    for(auto strat : add_strats) {
-      ok = strat(buckets, decimal);
-      if(!overflow_count(ok)) break;
-    }
+    STRAT_LOG(5, "before balance : " << my_format(buckets));
+    buckets.rebalance(safe_bucket_inc);
+    STRAT_LOG(5, "after balance : stats=" << print_stats(buckets.calculate_stats()));
+
+    ok = add_rebalance_strategy_0(buckets, decimal);
+    if(overflow_count(ok)) 
+      ok = add_rebalance_strategy_4(buckets, decimal);
   }
   return ok;
 }
@@ -599,7 +678,7 @@ uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal) {
 // strategy 0 : just try to add
 uint32_t add_rebalance_strategy_0(Buckets& buckets, decimal_t decimal) {
   uint32_t ok = buckets.add_number(decimal);
-  STRAT_LOG(0, "decimal=" << my_format(decimal) << " ov_count=" << ok);
+  //STRAT_LOG(0, "decimal=" << my_format(decimal) << " ov_count=" << ok);
   return ok;
 }
 
@@ -608,10 +687,12 @@ uint32_t add_rebalance_strategy_1(Buckets& buckets, decimal_t decimal) {
   auto bucket_int = decimal_to_bucket_int(decimal);
 
   uint32_t ok = buckets.r_extend(bucket_int.first, safe_bucket_inc);
-  STRAT_LOG(1, "decimal=" << my_format(decimal) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int));
+  STRAT_LOG(1, "decimal=" << my_format(decimal) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int) << endl
+    << " stats=" << my_format(buckets, bucket_int.first) << " cont_stats=" << my_format(buckets, buckets.prev_contiguous(bucket_int.first)));
   if(overflow_count(ok)) {
     ok = buckets.extend(bucket_int.first, safe_bucket_inc);
-    STRAT_LOG(1, "decimal=" << my_format(decimal) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int));
+    STRAT_LOG(1, "decimal=" << my_format(decimal) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int) << endl
+      << " stats=" << my_format(buckets, bucket_int.first) << " cont_stats=" << my_format(buckets, buckets.next_contiguous(bucket_int.first)));
   }
   if(!overflow_count(ok)) {
     ok = buckets.add_number(decimal);
@@ -630,7 +711,7 @@ uint32_t add_rebalance_strategy_2(Buckets& buckets, decimal_t decimal) {
     return i != bucket_int.first && buckets.capacity(i) >= target_len && target_cap >= buckets.lens[i];
   });
   
-  if(swap_idx == Buckets::bucket_len)
+  if(swap_idx == bucket_len)
     ok = make_ov_error(1);
   else {
     ok = buckets.swap(swap_idx, bucket_int.first);
@@ -639,43 +720,57 @@ uint32_t add_rebalance_strategy_2(Buckets& buckets, decimal_t decimal) {
     MY_ASSERT(!overflow_count(ok));
   }
   STRAT_LOG(2, "decimal=" << my_format(decimal) << " ov_count=" << ok
-      << " bucket_int=" << my_format(bucket_int) << " swap_idx=" << swap_idx);
+      << " bucket_int=" << my_format(bucket_int) << " swap_idx=" << swap_idx << endl
+      << " stats=" << my_format(buckets, bucket_int.first) << " swap_stats=" << my_format(buckets, swap_idx));
   return ok;
 }
 
 // strategy 3 : swap any contiguous bucket with one with more space and extend
 uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal) {
+  using extend_t = function<uint32_t(uint32_t, uint32_t, uint32_t)>;
   uint32_t ok = make_ov_error(1);
   auto bucket_int = decimal_to_bucket_int(decimal);
   
-  auto side_strat = [&buckets, &decimal, /*&bucket_int,*/ &ok] (uint32_t cont_idx, function<uint32_t()> func) {
+  auto side_strat = [&buckets, &decimal, &bucket_int, &ok] (uint32_t cont_idx, extend_t func) {
     uint32_t target_len = buckets.lens[cont_idx] - 8*safe_bucket_inc;
     uint32_t swap_idx = buckets.select_first([&](uint32_t i) { 
       return i != cont_idx && buckets.lens[i] <= target_len && buckets.lens[cont_idx] <= buckets.capacity(i);
     });
     
-    if(swap_idx == Buckets::bucket_len || (int32_t)target_len < 0)
+    if(swap_idx == bucket_len || (int32_t)target_len < 0)
       ok = make_ov_error(1);
     else {
       ok = buckets.swap(swap_idx, cont_idx);
       MY_ASSERT(!overflow_count(ok));
-      ok = func();
+      ok = func(bucket_int.first, safe_bucket_inc, swap_idx);
       MY_ASSERT(!overflow_count(ok));
       ok = buckets.add_number(decimal);
       MY_ASSERT(!overflow_count(ok));
     }
     STRAT_LOG(3, "decimal=" << my_format(decimal) << " ov_count=" << ok
-        << " bucket_int=" << my_format(bucket_int) << " cont_idx=" << cont_idx << " swap_idx=" << swap_idx);
+        << " bucket_int=" << my_format(bucket_int) << " cont_idx=" << cont_idx << " swap_idx=" << swap_idx << endl
+        << " stats=" << my_format(buckets, bucket_int.first) << " swap_stats=" << my_format(buckets, swap_idx));
   };
 
   uint32_t cont_idx = buckets.prev_contiguous(bucket_int.first);
-  if (cont_idx != Buckets::bucket_len)
-    side_strat(cont_idx, [&]() { return buckets.r_extend(bucket_int.first, safe_bucket_inc, cont_idx); });
+  if (cont_idx != bucket_len)
+    side_strat(cont_idx, [&buckets](uint32_t t, uint32_t a, uint32_t c) { return buckets.r_extend(t, a, c); });
   if(overflow_count(ok)) {
     cont_idx = buckets.next_contiguous(bucket_int.first);
-    if (cont_idx != Buckets::bucket_len)
-      side_strat(cont_idx, [&]() { return buckets.extend(bucket_int.first, safe_bucket_inc, cont_idx); });
+    if (cont_idx != bucket_len)
+      side_strat(cont_idx, [&buckets](uint32_t t, uint32_t a, uint32_t c) { return buckets.extend(t, a, c); });
   }
+  return ok;
+}
+
+// strategy 4 : steal 1 byte from all possible buckets until there is enough space
+uint32_t add_rebalance_strategy_4(Buckets& buckets, decimal_t decimal) {
+  auto bucket_int = decimal_to_bucket_int(decimal);
+  buckets.steal_expand(bucket_int.first, safe_bucket_inc);
+  uint32_t ok = buckets.add_number(decimal);
+  STRAT_LOG(4, "decimal=" << my_format(decimal) << " ov_count=" << ok
+      << " bucket_int=" << my_format(bucket_int) << endl
+      << " stats=" << my_format(buckets, bucket_int.first));
   return ok;
 }
 
@@ -686,11 +781,12 @@ Buckets order_numbers_into_buckets(const vector<decimal_t>& input) {
     uint32_t ok = add_rebalance_if_needed(buckets, decimal);
     if(overflow_count(ok)) {
       LOG("failed to add : " << my_format(decimal));
-      LOG("stats : " << my_format(buckets.calculate_stats()));
+      LOG("stats : " << print_stats(buckets.calculate_stats()));
+      LOG("raw : " << my_format(buckets));
       assert(false);
     }
-    //if(count % (input_len/20) == 0)
-    //  LOG("buckets stats (" << count << ") = " << my_format(buckets.calculate_stats()));
+    if(count % (input_len/20) == 0)
+      LOG("buckets stats (" << count << ") = " << print_stats(buckets.calculate_stats()));
     ++count;
   }
   return buckets;

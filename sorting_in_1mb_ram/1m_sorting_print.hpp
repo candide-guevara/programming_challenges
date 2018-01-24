@@ -8,6 +8,7 @@
 //#define STRAT_LOG(num, msg) std::cout << "strategy " << num << " : " << msg << std::endl;
 #define STRAT_LOG(num, msg) 
 #define IOMANIPS std::scientific << std::setprecision(7) << std::dec
+#define TEST_HEADER() LOG(__PRETTY_FUNCTION__ << " start")
 
 namespace {
 
@@ -22,8 +23,8 @@ T my_format(T input) {
   return input;
 }
 
-template<class T>
-std::string my_format(const std::pair<T,T>& input) {
+template<class T, class V>
+std::string my_format(const std::pair<T,V>& input) {
   auto ss = build_stringstream();
   ss << "(" << input.first << "," << input.second << ")";
   return ss.str();
@@ -37,14 +38,25 @@ inline void* my_format(uint8_t* p) {
   return (void*)p;
 }
 
-std::string my_format(const StatBuckets& stats) {
+std::string my_format(const Buckets& buckets) {
   auto ss = build_stringstream();
-  ss << "{ min_cap=" << my_format(stats.min_cap) << " min_avail=" << my_format(stats.min_avail);
-  ss << " max_cap=" <<  my_format(stats.max_cap) << " max_avail=" << my_format(stats.max_avail) << std::endl;
-  ss << " avg_avail=" << stats.avg_avail;
-  ss << " std_cap=" << stats.std_cap << " std_avail=" << stats.std_avail << std::endl;
-  ss << " tot_avail=" << stats.tot_avail << " tot_len=" << stats.tot_len ;
-  ss << " }" << std::endl;
+  for(uint32_t idx=0; idx < bucket_len; ++idx)
+    ss << idx << " : start=" << (void*)buckets.starts[idx] << " end=" << (void*)buckets.ends[idx]
+       << " lens=" << (buckets.lens[idx] / 8) << "/" << (buckets.lens[idx] % 8) 
+       << " cap=" << (buckets.ends[idx] - buckets.starts[idx])
+       << " start+lens=" << (void*)(buckets.starts[idx] + buckets.lens[idx]/8) << std::endl;
+  return ss.str();
+}
+
+std::string my_format(const Buckets& buckets, uint32_t idx) {
+  auto ss = build_stringstream();
+  if(idx < bucket_len)
+    ss << idx << " : start=" << (void*)buckets.starts[idx] << " end=" << (void*)buckets.ends[idx]
+       << " lens=" << (buckets.lens[idx] / 8) << "/" << (buckets.lens[idx] % 8) 
+       << " cap=" << (buckets.ends[idx] - buckets.starts[idx])
+       << " start+lens=" << (void*)(buckets.starts[idx] + buckets.lens[idx]/8);
+  else
+    ss << "out of bounds";
   return ss.str();
 }
 
@@ -66,6 +78,17 @@ std::string print_raw_bucket(const uint8_t* start, size_t len) {
   return ss.str();
 }
 
+std::string print_stats(const StatBuckets& stats) {
+  auto ss = build_stringstream();
+  ss << "{ min_cap=" << my_format(stats.min_cap) << " min_avail=" << my_format(stats.min_avail);
+  ss << " max_cap=" <<  my_format(stats.max_cap) << " max_avail=" << my_format(stats.max_avail) << std::endl;
+  ss << " avg_avail=" << stats.avg_avail;
+  ss << " std_cap=" << stats.std_cap << " std_avail=" << stats.std_avail << std::endl;
+  ss << " tot_avail=" << stats.tot_avail << " tot_len=" << stats.tot_len << std::endl;
+  ss << " len_histo=" << print_collection(stats.len_histo) << std::endl;
+  ss << " }" << std::endl;
+  return ss.str();
+}
 
 } //namespce anon
 

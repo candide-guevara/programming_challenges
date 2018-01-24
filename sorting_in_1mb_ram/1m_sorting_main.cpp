@@ -72,7 +72,7 @@ vector<uint32_t> generate_rand_uint_input(uint32_t len, uint32_t max_item_val) {
   return input;
 }
 
-array<uint8_t, 1024> test_write_compression() {
+array<uint8_t, 1024> write_compressed_data() {
   DECLARE_INPUT;
   array<uint8_t, 1024> data;
   uint8_t* start=data.data(), *end=data.data()+data.size();
@@ -94,6 +94,7 @@ Buckets build_and_fill_first_bucket() {
 }
 
 void test_compression() {
+  TEST_HEADER();
   DECLARE_INPUT;
   for(auto u : input) {
     auto comp = compress(u);
@@ -103,6 +104,7 @@ void test_compression() {
 }
 
 void test_compression_exhaustive() {
+  TEST_HEADER();
   for(uint32_t u=0; u<rand_msk; ++u) {
     auto comp = compress(u);
     auto decomp = decompress(comp);
@@ -114,12 +116,14 @@ void test_compression_exhaustive() {
 }
 
 void test_bucket_iteration() {
+  TEST_HEADER();
   DECLARE_INPUT;
   auto buckets = build_and_fill_first_bucket();
   compare_bucket_to_ref(input, buckets.at(0));
 }
 
 void test_bucket_algorithm() {
+  TEST_HEADER();
   DECLARE_INPUT;
   auto buckets = build_and_fill_first_bucket();
   vector<uint32_t> to_find = {100, 0, 1, rand_msk};
@@ -146,6 +150,7 @@ void test_bucket_algorithm() {
 }
 
 void test_codec_fuzzy() {
+  TEST_HEADER();
   uint32_t idx = 0;
   auto decimals = generate_rand_decimal_input(1000 * 1000 * 10);
   vector<uint8_t> buffer;
@@ -167,6 +172,7 @@ void test_codec_fuzzy() {
 }
 
 void test_bucket_swap_same_len() {
+  TEST_HEADER();
   auto buckets = build_and_fill_first_bucket();
 
   DECLARE_INPUT;
@@ -189,6 +195,7 @@ void test_bucket_swap_same_len() {
 }
 
 void test_bucket_swap_fuzzy() {
+  TEST_HEADER();
   auto buckets = build_buckets();
 
   for(uint32_t attempt = 0;
@@ -222,6 +229,7 @@ void test_bucket_swap_fuzzy() {
 }
 
 void test_bucket_swap_one_empty() {
+  TEST_HEADER();
   DECLARE_INPUT;
   auto buckets = build_and_fill_first_bucket();
   uint8_t *ori_0_start = buckets.starts[0];
@@ -243,8 +251,9 @@ void test_bucket_swap_one_empty() {
 }
 
 void test_decompression() {
+  TEST_HEADER();
   DECLARE_INPUT;
-  array<uint8_t, 1024> data = test_write_compression();
+  array<uint8_t, 1024> data = write_compressed_data();
   uint8_t* start=data.data();
   uint32_t bit_offset = 0;
 
@@ -257,6 +266,7 @@ void test_decompression() {
 }
 
 void test_write_overflow() {
+  TEST_HEADER();
   array<uint8_t, 1024> data = {{0}};
   uint8_t* start=data.data();
   uint32_t result1 = write_compressed(rand_msk, start, 0, start+2);
@@ -266,11 +276,13 @@ void test_write_overflow() {
 }
 
 void test_generate_rand_decimal_input() {
+  TEST_HEADER();
   auto input = generate_rand_decimal_input(100);
   LOG(print_collection(input));
 }
 
 void test_decimal_to_bucket_int() {
+  TEST_HEADER();
   auto input = generate_rand_decimal_input(100);
   for(auto d : input) {
     auto result = decimal_to_bucket_int(d);
@@ -279,6 +291,7 @@ void test_decimal_to_bucket_int() {
 }
 
 void test_add_number() {
+  TEST_HEADER();
   vector<uint32_t> input = { 0, 0, 1, 1, 3, 5, 5, 7, 9, 12, 14, 14 };
   auto buckets = build_buckets();
 
@@ -300,6 +313,7 @@ void test_add_number() {
 }
 
 void test_add_number_fuzzy() {
+  TEST_HEADER();
   auto buckets = build_buckets();
   for(uint32_t attempt = 0;
       attempt < 10000;
@@ -317,6 +331,7 @@ void test_add_number_fuzzy() {
 }
 
 void test_bucket_both_extend_fuzzy() {
+  TEST_HEADER();
   auto buckets = build_buckets();
 
   auto test_one_side = [&buckets](uint32_t grow_idx, uint32_t shrink_idx, function<uint32_t(uint32_t, uint32_t)> extend) {
@@ -342,10 +357,11 @@ void test_bucket_both_extend_fuzzy() {
 }
 
 void test_bucket_both_extend_fail() {
+  TEST_HEADER();
   auto buckets = build_buckets();
   uint32_t ok = buckets.r_extend(0, 1);
   MY_ASSERT(overflow_count(ok) == 1);
-  ok = buckets.extend(Buckets::bucket_len - 1, 1);
+  ok = buckets.extend(bucket_len - 1, 1);
   MY_ASSERT(overflow_count(ok) == 1);
 
   vector<uint32_t> input(buckets.capacity(0) / compress_len(1), 1);
@@ -361,6 +377,7 @@ void test_bucket_both_extend_fail() {
 }
 
 void test_bucket_add_and_rebalance() {
+  TEST_HEADER();
   auto buckets = build_buckets();
   decimal_t decimal = {1, 0};
   uint32_t max_cap = buckets.select_bigger([&](uint32_t i) { return buckets.capacity(i); }).second;
@@ -396,20 +413,21 @@ void test_bucket_add_and_rebalance() {
 }
 
 void test_bucket_add_and_rebalance_fuzzy() {
+  TEST_HEADER();
   const uint32_t fill_val = 0;
   auto buckets = build_buckets();
   auto ref_buckets = build_buckets();
   uint32_t ref_cap = ref_buckets.capacity(0) / compress_len(fill_val);
   vector<uint32_t> input(0.9 * ref_cap, fill_val);
-  for(uint32_t i=0; i<Buckets::bucket_len; ++i) 
+  for(uint32_t i=0; i<bucket_len; ++i) 
     fill_bucket(ref_buckets, i, input);
   auto ref_stats = ref_buckets.calculate_stats();
   
-  for(uint32_t attempt = 0; attempt < 100; ++attempt) {
+  for(uint32_t attempt = 0; attempt < 10; ++attempt) {
     buckets.clear();
     buckets.buffer = ref_buckets.buffer;
     buckets.lens = ref_buckets.lens;
-    auto extra_input = generate_rand_decimal_input(0.05 * Buckets::bucket_len * ref_cap);
+    auto extra_input = generate_rand_decimal_input(0.05 * bucket_len * ref_cap);
     extra_input.erase(std::remove_if(extra_input.begin(), extra_input.end(), 
       [](decimal_t d) { return d.first % bucket_val_mask == 0; }));
 
@@ -471,7 +489,6 @@ void silly_test_all() {
   test_compression();
   test_generate_rand_decimal_input();
   test_decimal_to_bucket_int();
-  test_write_compression();
   test_decompression();
   test_write_overflow();
 }
@@ -496,8 +513,8 @@ void test_validation_all() {
 int main(void) {
   std::cout << IOMANIPS;
 
-  //test_validation_all();
-  sort_one_million_in_one_mb();
+  test_validation_all();
+  //sort_one_million_in_one_mb();
   return 0;
 }
 

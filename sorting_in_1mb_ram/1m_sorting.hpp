@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <iterator>
+#include <map>
 #include <type_traits>
 #include <vector>
 #include <utility>
@@ -20,9 +21,8 @@ using int_len_t = std::pair<uint32_t, uint32_t>;
 using bucket_int_t = std::pair<uint32_t, uint32_t>;
 
 const static size_t input_len = 1000000;
-const static size_t max_rand = 899999999;
-const static size_t rand_msk = 100000000;
-const static size_t bias = rand_msk / input_len;
+const static size_t max_rand  = 899999999;
+const static size_t rand_msk  = 100000000;
 const static size_t comp_len_1 = 7;
 const static size_t comp_len_2 = 15;
 const static size_t comp_len_3 = 24;
@@ -34,9 +34,12 @@ const static size_t comp_max_4 = (1 << (comp_len_4 - 3));
 const static size_t safe_buf_len = comp_len_4 / comp_len_1 + 1;
 const static size_t safe_bucket_inc = 2 * comp_len_4 / 8;
 const static size_t decimal_places = 9;
-const static size_t bucket_family_len = 100;
+const static size_t bucket_family_len = 10;
 const static size_t bucket_max_value = rand_msk / bucket_family_len - 1;
 const static size_t bucket_val_mask = rand_msk / bucket_family_len;
+const static size_t bucket_len = bucket_family_len * decimal_places;
+const static size_t buffer_len = input_len * 1.50;
+const static size_t bias = bucket_val_mask * bucket_len / input_len;
 
 struct Buckets;
 
@@ -91,22 +94,22 @@ struct ItContainer {
 };
 
 struct StatBuckets {
+  using Histo = std::map<uint32_t, uint32_t>;
   bucket_int_t min_cap, min_avail;
   bucket_int_t max_cap, max_avail;
   double avg_cap, avg_avail;
   double std_cap, std_avail;
   uint32_t tot_len, tot_avail;
+  Histo len_histo;
 };
 
 struct Buckets {
-  const static size_t bucket_len = bucket_family_len * decimal_places;
-  const static size_t buffer_len = input_len * 1.25;
   std::vector<uint8_t> buffer;
   std::vector<uint8_t*> starts, ends;
   std::vector<uint32_t> lens;
 
-  ItContainer<BucketIt> at(uint32_t idx);
-  ItContainer<GlobalIt> global_at();
+  ItContainer<BucketIt> at(uint32_t idx) const;
+  ItContainer<GlobalIt> global_at() const;
   BucketIt begin(uint32_t) const;
   BucketIt end(uint32_t) const;
   GlobalIt global_begin() const;
@@ -120,7 +123,8 @@ struct Buckets {
   uint32_t r_extend(uint32_t target, uint32_t amount, uint32_t prev);
   uint32_t extend(uint32_t target, uint32_t amount);
   uint32_t extend(uint32_t target, uint32_t amount, uint32_t next);
-  uint32_t rebalance(uint32_t amount);
+  uint32_t rebalance(uint32_t min_distrib);
+  uint32_t steal_expand(uint32_t target, uint32_t max_expand);
 
   template<bool invert=false, class F>
   bucket_int_t select_bigger(F) const;
@@ -163,6 +167,7 @@ uint32_t add_rebalance_strategy_0(Buckets& buckets, decimal_t decimal);
 uint32_t add_rebalance_strategy_1(Buckets& buckets, decimal_t decimal);
 uint32_t add_rebalance_strategy_2(Buckets& buckets, decimal_t decimal);
 uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal);
+uint32_t add_rebalance_strategy_4(Buckets& buckets, decimal_t decimal);
 
 bucket_int_t decimal_to_bucket_int(decimal_t decimal);
 decimal_t bucket_int_to_decimal(bucket_int_t bucket_int);
