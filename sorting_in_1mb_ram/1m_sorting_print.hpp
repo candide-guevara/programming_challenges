@@ -86,6 +86,7 @@ std::string print_stats(const StatBuckets& stats) {
   ss << " std_cap=" << stats.std_cap << " std_avail=" << stats.std_avail << std::endl;
   ss << " tot_avail=" << stats.tot_avail << " tot_len=" << stats.tot_len << std::endl;
   ss << " len_histo=" << print_collection(stats.len_histo) << std::endl;
+  ss << " val_histo=" << print_collection(stats.val_histo) << std::endl;
   ss << " }" << std::endl;
   return ss.str();
 }

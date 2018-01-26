@@ -20,7 +20,7 @@ using decimal_t = std::pair<uint32_t, uint32_t>;
 using int_len_t = std::pair<uint32_t, uint32_t>;
 using bucket_int_t = std::pair<uint32_t, uint32_t>;
 
-const static size_t input_len = 1000000;
+const static size_t input_len = 10000000;
 const static size_t max_rand  = 899999999;
 const static size_t rand_msk  = 100000000;
 const static size_t comp_len_1 = 7;
@@ -34,11 +34,11 @@ const static size_t comp_max_4 = (1 << (comp_len_4 - 3));
 const static size_t safe_buf_len = comp_len_4 / comp_len_1 + 1;
 const static size_t safe_bucket_inc = 2 * comp_len_4 / 8;
 const static size_t decimal_places = 9;
-const static size_t bucket_family_len = 10;
+const static size_t bucket_family_len = 100;
 const static size_t bucket_max_value = rand_msk / bucket_family_len - 1;
 const static size_t bucket_val_mask = rand_msk / bucket_family_len;
 const static size_t bucket_len = bucket_family_len * decimal_places;
-const static size_t buffer_len = input_len * 1.50;
+const static size_t buffer_len = input_len * 1.90;
 const static size_t bias = bucket_val_mask * bucket_len / input_len;
 
 struct Buckets;
@@ -100,7 +100,7 @@ struct StatBuckets {
   double avg_cap, avg_avail;
   double std_cap, std_avail;
   uint32_t tot_len, tot_avail;
-  Histo len_histo;
+  Histo len_histo, val_histo;
 };
 
 struct Buckets {

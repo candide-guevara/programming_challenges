@@ -93,6 +93,8 @@ Buckets build_and_fill_first_bucket() {
   return buckets;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void test_compression() {
   TEST_HEADER();
   DECLARE_INPUT;
@@ -120,6 +122,28 @@ void test_bucket_iteration() {
   DECLARE_INPUT;
   auto buckets = build_and_fill_first_bucket();
   compare_bucket_to_ref(input, buckets.at(0));
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void test_compress_len() {
+  TEST_HEADER();
+  int32_t lower_bound1 = (comp_max_1>>1) <= bias ? (comp_max_1>>1) : bias;
+  int32_t lower_bound2 = (comp_max_2>>1) <= bias ? (comp_max_2>>1) : bias;
+
+  for(int32_t n=-lower_bound1; n<(int32_t)(comp_max_1>>1); ++n)
+    MY_ASSERT(compress_len(bias + n) == comp_len_1);
+  for(int32_t n=-lower_bound2; n<(int32_t)(comp_max_2>>1); ++n)
+    if(n<-(int32_t)(comp_max_1>>1) || n>=(int32_t)(comp_max_1>>1))
+      MY_ASSERT(compress_len(bias + n) == comp_len_2);
+  for(auto n : generate_rand_uint_input(1000000, comp_max_3/2 - 1))
+    if(n>=(int32_t)(comp_max_2>>1))
+      MY_ASSERT(compress_len(bias + n) == comp_len_3);
+
+  MY_ASSERT(compress_len(bias + comp_max_3/2) == comp_len_4);
+  MY_ASSERT(compress_len(bias + comp_max_3/2 + 1) == comp_len_4);
+  MY_ASSERT(compress_len(bias + comp_max_3/2 - 1) == comp_len_3);
+  MY_ASSERT(compress_len(bias + comp_max_3) == comp_len_4);
 }
 
 void test_bucket_algorithm() {
@@ -468,16 +492,16 @@ void sort_one_million_in_one_mb() {
   for(uint32_t attempt = 0; attempt < 1; ++attempt) {
     auto input = generate_rand_decimal_input(input_len);
     const auto buckets = order_numbers_into_buckets(input);
+    LOG("buckets stats = " << print_stats(buckets.calculate_stats()));
     
     auto global_it = buckets.global_begin();
     std::sort(input.begin(), input.end(), comp_decimal);
 
     for(uint32_t idx=0; idx < input.size(); ++idx, ++global_it) {
       MY_ASSERT(global_it != buckets.global_end());
-      if(input[idx] != *global_it) {
-        //LOG("at " << idx << " : " << my_format(input[idx]) << " != " << my_format(*global_it));
+      LOG("at " << idx << " : " << my_format(input[idx]) << " != " << my_format(*global_it));
+      if(input[idx] != *global_it) 
         ++error_count;
-      }
     }
   }
   LOG("error_count  = " << error_count);
@@ -495,6 +519,7 @@ void silly_test_all() {
 
 /* self validating tests */
 void test_validation_all() {
+  test_compress_len();
   test_bucket_iteration();
   test_bucket_algorithm();
   test_compression_exhaustive();
@@ -513,8 +538,8 @@ void test_validation_all() {
 int main(void) {
   std::cout << IOMANIPS;
 
-  test_validation_all();
-  //sort_one_million_in_one_mb();
+  //test_validation_all();
+  sort_one_million_in_one_mb();
   return 0;
 }
 

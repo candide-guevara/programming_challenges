@@ -1,9 +1,9 @@
 #include "1m_sorting.hpp"
 #include "1m_sorting_print.hpp"
 #include <algorithm>
-#include <deque>
 #include <functional>
 #include <iostream>
+#include <list>
 #include <numeric>
 #include <cmath>
 
@@ -102,7 +102,7 @@ GlobalIt Buckets::global_begin() const {
     return GlobalIt{this, idx};
 
   auto global_it = GlobalIt{this, idx, begin(idx)};
-  global_it.value = decimal_to_bucket_int(make_pair(*global_it.internal_it, idx));
+  global_it.value = bucket_int_to_decimal(make_pair(idx, *global_it.internal_it));
   return global_it;
 }
 
@@ -139,17 +139,25 @@ uint32_t Buckets::byte_len(uint32_t target) const {
 }
 
 StatBuckets Buckets::calculate_stats() const {
+  const uint32_t window = 10;
   auto tot_avail = Buckets::accumulate([this](uint32_t i) { return available(i); }, 0u);
   auto avg_cap = Buckets::accumulate([this](uint32_t i) { return capacity(i); }, 0.0) / bucket_len;
   auto avg_avail = (double)tot_avail / bucket_len;
   auto std_avail = 0.0, std_cap = 0.0;
-  StatBuckets::Histo len_histo;
+  StatBuckets::Histo len_histo, val_histo;
 
   for(uint32_t i=0; i < bucket_len; ++i) {
     std_cap   += (avg_cap - capacity(i))*(avg_cap - capacity(i)); 
     std_avail += (avg_avail - available(i))*(avg_avail - available(i)); 
-    for(auto val : at(i)) 
+    for(auto val : at(i)) {
       ++len_histo[compress_len(val)];
+      if(val >= bias - comp_max_1 && val <= bias + comp_max_1)
+        ++val_histo[val/window];
+      if(val >= comp_max_2-5*window && val < comp_max_2)
+        ++val_histo[val/window];
+      if(val >= comp_max_3-500*window && val < comp_max_3)
+        ++val_histo[val/100*window];
+    }
   }
   
   StatBuckets stats = {
@@ -164,6 +172,7 @@ StatBuckets Buckets::calculate_stats() const {
     std::accumulate(lens.begin(), lens.end(), 0u),
     tot_avail,
     std::move(len_histo),
+    std::move(val_histo),
   };
   return stats;
 }
@@ -278,8 +287,8 @@ uint32_t Buckets::add_number(decimal_t decimal) {
     if(ov_count > 0)
       return make_ov_error(ov_count);
 
-    MY_ASSERT(delta < sum && next <= sum && extra_len <= (int32_t)comp_len_4);
-    deque<uint32_t> buffer = { delta, next };
+    MY_ASSERT(delta < sum && next <= sum && extra_len <= (int32_t)(2*comp_len_4));
+    list<uint32_t> buffer = { delta, next };
 
     for(uint32_t i=2; i < safe_buf_len && read_it != bucket_end; ++i)
       buffer.push_back(read_it.get_and_advance().first);
@@ -571,7 +580,17 @@ comp_int_t compress(uint32_t number) {
 }
 
 size_t compress_len(uint32_t number) {
-  return compress_len(compress(number));
+  const int32_t lower_bound1 = comp_max_1/2;
+  const int32_t lower_bound2 = comp_max_2/2;
+  const int32_t lower_bound3 = comp_max_3/2;
+  int32_t biased = number - bias;
+  if(biased >= -lower_bound1 && biased < lower_bound1)
+    return comp_len_1;
+  if(biased >= -lower_bound2 && biased < lower_bound2)
+    return comp_len_2;
+  if(biased >= -lower_bound3 && biased < lower_bound3)
+    return comp_len_3;
+  return comp_len_4;
 }
 
 size_t compress_len(comp_int_t comp) {
