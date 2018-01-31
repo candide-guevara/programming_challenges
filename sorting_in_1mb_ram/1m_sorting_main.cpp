@@ -43,6 +43,14 @@ void fill_bucket(Buckets& buckets, uint32_t target, const vector<uint32_t>& ref_
   buckets.update(target, write_it);
 }
 
+void fill_bucket_raw(Buckets& buckets, uint32_t target, const vector<uint8_t>& ref_vect) {
+  auto start = buckets.starts[target];
+  auto start_it = buckets.begin(target);
+  std::copy(ref_vect.begin(), ref_vect.end(), start);
+  start_it.shift_bits(8 * ref_vect.size());
+  buckets.update(target, start_it);
+}
+
 vector<decimal_t> generate_rand_decimal_input(uint32_t len, uint32_t max_value=max_rand) {
   vector<decimal_t> result;
   result.resize(len);
@@ -314,6 +322,106 @@ void test_decimal_to_bucket_int() {
   }
 }
 
+void test_bucket_shift_bits() {
+  TEST_HEADER();
+  vector<uint8_t> input1 = {1,2,3,4,5,6,7};
+  vector<uint8_t> input2 = {1,1,1,1,1,1,1};
+  vector<uint8_t> input3 = {64,64,64};
+  auto buckets = build_buckets();
+  fill_bucket_raw(buckets, 0, input1);
+  fill_bucket_raw(buckets, 1, input1);
+  fill_bucket_raw(buckets, 2, input2);
+  fill_bucket_raw(buckets, 3, input2);
+  fill_bucket_raw(buckets, 4, input2);
+  fill_bucket_raw(buckets, 5, input2);
+  fill_bucket_raw(buckets, 6, input2);
+  fill_bucket_raw(buckets, 7, input3);
+
+  auto start_it = buckets.begin(0);
+  start_it.shift_bits(24);
+  buckets.shift_bits(0, start_it, 16);
+  MY_ASSERT(std::equal(input1.begin() + 3, input1.end(), buckets.starts[0]+5));
+  MY_ASSERT(std::equal(input1.begin(), input1.begin() + 3, buckets.starts[0]));
+  MY_ASSERT(buckets.end(0).start == buckets.starts[0]+9);
+
+  start_it = buckets.begin(1);
+  start_it.shift_bits(24);
+  buckets.shift_bits(1, start_it, -16);
+  MY_ASSERT(std::equal(input1.begin() + 3, input1.end(), buckets.starts[1]+1));
+  MY_ASSERT(buckets.starts[1][0] == 1);
+  MY_ASSERT(buckets.end(1).start == buckets.starts[1]+5);
+
+  vector<uint8_t> ref1 = {8,8,8,8,0};
+  start_it = buckets.begin(2);
+  start_it.shift_bits(24);
+  buckets.shift_bits(2, start_it, 19);
+  MY_ASSERT(std::equal(ref1.begin(), ref1.end(), buckets.starts[2]+5));
+  MY_ASSERT(buckets.end(2).start == buckets.starts[2]+9);
+
+  vector<uint8_t> ref2 = {33,32,32,32};
+  start_it = buckets.begin(3);
+  start_it.shift_bits(24);
+  buckets.shift_bits(3, start_it, -11);
+  MY_ASSERT(std::equal(ref2.begin(), ref2.end(), buckets.starts[3]+1));
+  MY_ASSERT(buckets.end(3).start == buckets.starts[3]+5);
+
+  start_it = buckets.begin(4);
+  start_it.shift_bits(24);
+  buckets.shift_bits(4, start_it, 3);
+  MY_ASSERT(std::equal(ref1.begin(), ref1.end(), buckets.starts[4]+3));
+  MY_ASSERT(buckets.end(4).start == buckets.starts[4]+7);
+
+  start_it = buckets.begin(5);
+  start_it.shift_bits(27);
+  buckets.shift_bits(5, start_it, 3);
+  MY_ASSERT(std::equal(ref1.begin(), ref1.end(), buckets.starts[5]+3));
+  MY_ASSERT(buckets.end(5).start == buckets.starts[5]+7);
+
+  vector<uint8_t> ref4 = {32,32,32,0};
+  start_it = buckets.begin(6);
+  start_it.shift_bits(29);
+  buckets.shift_bits(6, start_it, -3);
+  MY_ASSERT(std::equal(ref4.begin(), ref4.end(), buckets.starts[6]+3));
+  MY_ASSERT(buckets.end(6).start == buckets.starts[6]+6);
+
+  vector<uint8_t> ref3 = {0,2,2,2};
+  start_it = buckets.begin(7);
+  buckets.shift_bits(7, start_it, 3);
+  MY_ASSERT(std::equal(ref3.begin(), ref3.end(), buckets.starts[7]));
+  MY_ASSERT(buckets.end(7).start == buckets.starts[7]+3);
+}
+
+void test_bucket_fail_shift_bits() {
+  TEST_HEADER();
+  auto buckets = build_buckets();
+  vector<uint8_t> input1(buckets.capacity(0) / 8, 222);
+  vector<uint8_t> input2 = {1,1,1,1,1,1,1};
+  fill_bucket_raw(buckets, 0, input1);
+  fill_bucket_raw(buckets, 1, input2);
+
+  auto start_it = buckets.begin(0);
+  uint32_t ok = buckets.shift_bits(0, start_it, 1);
+  MY_ASSERT(overflow_count(ok));
+  MY_ASSERT(buckets.end(0).start == buckets.ends[0]);
+
+  ok = buckets.shift_bits(0, start_it, 11);
+  MY_ASSERT(overflow_count(ok));
+
+  start_it.shift_bits(77);
+  ok = buckets.shift_bits(0, start_it, -66);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(buckets.end(0).start == buckets.ends[0]-9);
+
+  start_it = buckets.begin(1);
+  ok = buckets.shift_bits(1, start_it, -1);
+  MY_ASSERT(overflow_count(ok));
+
+  start_it.shift_bits(24);
+  ok = buckets.shift_bits(1, start_it, -25);
+  MY_ASSERT(overflow_count(ok));
+  MY_ASSERT(start_it.start == buckets.starts[1]+3);
+}
+
 void test_add_number() {
   TEST_HEADER();
   vector<uint32_t> input = { 0, 0, 1, 1, 3, 5, 5, 7, 9, 12, 14, 14 };
@@ -527,6 +635,8 @@ void test_validation_all() {
   test_bucket_swap_same_len();
   test_bucket_swap_fuzzy();
   test_codec_fuzzy();
+  test_bucket_shift_bits();
+  test_bucket_fail_shift_bits();
   test_add_number();
   test_add_number_fuzzy();
   test_bucket_both_extend_fail();
@@ -538,7 +648,7 @@ void test_validation_all() {
 int main(void) {
   std::cout << IOMANIPS;
 
-  //test_validation_all();
+  test_validation_all();
   sort_one_million_in_one_mb();
   return 0;
 }

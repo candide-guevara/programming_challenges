@@ -54,6 +54,7 @@ struct BucketIt {
   using reference = const uint32_t&;
   using iterator_category = std::forward_iterator_tag;
 
+  void shift_bits(int32_t len);
   uint32_t write_and_advance(uint32_t number);
   int_len_t get_and_advance();
   reference operator*();
@@ -119,6 +120,7 @@ struct Buckets {
   void update(uint32_t idx, BucketIt it);
   uint32_t swap(uint32_t from, uint32_t to);
   uint32_t add_number(decimal_t decimal);
+  uint32_t shift_bits(uint32_t target, BucketIt start_it, int32_t len);
   uint32_t r_extend(uint32_t target, uint32_t amount);
   uint32_t r_extend(uint32_t target, uint32_t amount, uint32_t prev);
   uint32_t extend(uint32_t target, uint32_t amount);
@@ -142,6 +144,7 @@ struct Buckets {
 
   uint32_t _swap(uint32_t from, uint32_t to);
   uint32_t _r_extend(uint32_t target, uint32_t amount);
+	uint32_t _add_number(decimal_t decimal);
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <functional>
 #include <iostream>
-#include <list>
 #include <numeric>
 #include <cmath>
 
@@ -22,6 +21,18 @@ int_len_t BucketIt::get_and_advance() {
   bit_offset = (bit_offset+int_len.second) % 8;
   MY_ASSERT(start <= end);
   return int_len;
+}
+
+void BucketIt::shift_bits(int32_t len) {
+  if(len < 0) {
+    start += len/8 + ((len % 8) + bit_offset < 0 ? -1 : 0);
+    bit_offset = (8 + bit_offset + (len%8)) % 8;
+  }
+  else if(len > 0) {
+    start += (bit_offset + len) / 8;
+    bit_offset = (bit_offset + len) % 8;
+  }
+  MY_ASSERT(start <= end);
 }
 
 uint32_t BucketIt::write_and_advance(uint32_t number) {
@@ -264,10 +275,58 @@ uint32_t Buckets::swap(uint32_t from, uint32_t to) {
   return 0;
 }
 
+uint32_t Buckets::shift_bits(uint32_t target, BucketIt start_it, int32_t extra_len) {
+  auto bucket_end = end(target);
+  MY_ASSERT(start_it != bucket_end && start_it.start <= ends[target]);
+  int32_t ov_count = extra_len < 0 ? 
+    -extra_len - (start_it - begin(target))
+    : extra_len - available(target);
+  if(ov_count > 0)
+    return make_ov_error(ov_count);
+
+  if(extra_len > 0) {
+    uint32_t move = extra_len / 8;
+    uint32_t shft = extra_len % 8;
+    uint8_t* end  = bucket_end.start;
+    uint8_t* strt = start_it.start;
+
+    MY_ASSERT(end+move <= ends[target]);
+    if ((bucket_end.bit_offset + shft) > 8)
+      *(end+move+1) = *end >> (8-shft);
+    *(end+move) = *end << shft;
+    while(strt <= --end) {
+      *(end+move+1) |= *end >> (8-shft);
+      *(end+move) = *end << shft;
+    }
+    MY_ASSERT(end+1 >= starts[target]);
+  }
+  else if(extra_len < 0) {
+    uint32_t move = -extra_len / 8;
+    uint32_t shft = -extra_len % 8;
+    uint8_t* end  = bucket_end.start;
+    uint8_t* strt = start_it.start;
+
+    MY_ASSERT(strt-move-1 >= starts[target]);
+    if (start_it.bit_offset < shft)
+      *(strt-move-1) |= *strt << (8-shft);
+    *(strt-move) = *strt >> shft;
+    while(++strt <= end) {
+      *(strt-move-1) |= *strt << (8-shft);
+      *(strt-move) = *strt >> shft;
+    }
+    MY_ASSERT(strt-1 <= ends[target]);
+  }
+
+  bucket_end.shift_bits(extra_len);
+  update(target, bucket_end);
+  return (extra_len < 0 ? 0 : extra_len);
+}
+
 uint32_t Buckets::add_number(decimal_t decimal) {
   auto bucket_int = decimal_to_bucket_int(decimal);
   auto bucket_end = end(bucket_int.first);
   uint32_t sum = 0;
+
   auto insert_it = find_if(begin(bucket_int.first), bucket_end,
     [&](uint32_t n) { sum += n; return (bucket_int.second < sum ? 1 : 0); });
 
@@ -276,33 +335,31 @@ uint32_t Buckets::add_number(decimal_t decimal) {
     update(bucket_int.first, insert_it);
     return result;
   }
-  else {
-    auto read_it = insert_it;
-    auto int_len = read_it.get_and_advance();
+  else { // begin : insert int the middle
+    uint32_t ok = 0;
+    auto start_it = insert_it;
+    auto int_len = start_it.get_and_advance();
     uint32_t delta = bucket_int.second - (sum - int_len.first);
     uint32_t next = sum - bucket_int.second; 
     int32_t extra_len = compress_len(delta) + compress_len(next) - int_len.second;
-    int32_t ov_count = extra_len - (bucket_end.end - bucket_end);
-
-    if(ov_count > 0)
-      return make_ov_error(ov_count);
-
     MY_ASSERT(delta < sum && next <= sum && extra_len <= (int32_t)(2*comp_len_4));
-    list<uint32_t> buffer = { delta, next };
 
-    for(uint32_t i=2; i < safe_buf_len && read_it != bucket_end; ++i)
-      buffer.push_back(read_it.get_and_advance().first);
-
-    while(!buffer.empty()) {
-      insert_it.write_and_advance(buffer.front());
-      buffer.pop_front();
-      if(read_it != bucket_end)
-        buffer.push_back(read_it.get_and_advance().first);
+    if(extra_len != 0 && start_it != bucket_end) {
+      ok = shift_bits(bucket_int.first, start_it, extra_len);
+      MY_ASSERT(!overflow_count(ok));
     }
+    else if(start_it == bucket_end) {
+      bucket_end.shift_bits(extra_len);
+      update(bucket_int.first, bucket_end);
+    }
+    
+    ok = insert_it.write_and_advance(delta);
+    MY_ASSERT(!overflow_count(ok));
+    ok = insert_it.write_and_advance(next);
+    MY_ASSERT(!overflow_count(ok));
 
-    update(bucket_int.first, insert_it);
-    return extra_len < 0 ? 0 : extra_len;
-  }
+    return (extra_len < 0 ? 0 : extra_len);
+  } // end: insert in the middle
 }
 
 uint32_t Buckets::rebalance(uint32_t min_distrib) {

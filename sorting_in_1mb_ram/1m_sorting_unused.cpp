@@ -1,4 +1,6 @@
 #include "1m_sorting.hpp"
+#include <algorithm>
+#include <list>
 
 using namespace std;
 
@@ -70,6 +72,47 @@ uint32_t Buckets::_swap(uint32_t from, uint32_t to) {
   update(from, from_wr);
   update(to, to_wr);
   return 0;
+}
+
+uint32_t Buckets::_add_number(decimal_t decimal) {
+  auto bucket_int = decimal_to_bucket_int(decimal);
+  auto bucket_end = end(bucket_int.first);
+  uint32_t sum = 0;
+  auto insert_it = find_if(begin(bucket_int.first), bucket_end,
+    [&](uint32_t n) { sum += n; return (bucket_int.second < sum ? 1 : 0); });
+
+  if (insert_it == bucket_end) {
+    uint32_t result = insert_it.write_and_advance(bucket_int.second - sum);
+    update(bucket_int.first, insert_it);
+    return result;
+  }
+  else {
+    auto read_it = insert_it;
+    auto int_len = read_it.get_and_advance();
+    uint32_t delta = bucket_int.second - (sum - int_len.first);
+    uint32_t next = sum - bucket_int.second;
+    int32_t extra_len = compress_len(delta) + compress_len(next) - int_len.second;
+    int32_t ov_count = extra_len - (bucket_end.end - bucket_end);
+
+    if(ov_count > 0)
+      return make_ov_error(ov_count);
+
+    MY_ASSERT(delta < sum && next <= sum && extra_len <= (int32_t)(2*comp_len_4));
+    list<uint32_t> buffer = { delta, next };
+
+    for(uint32_t i=2; i < safe_buf_len && read_it != bucket_end; ++i)
+      buffer.push_back(read_it.get_and_advance().first);
+
+    while(!buffer.empty()) {
+      insert_it.write_and_advance(buffer.front());
+      buffer.pop_front();
+      if(read_it != bucket_end)
+        buffer.push_back(read_it.get_and_advance().first);
+    }
+
+    update(bucket_int.first, insert_it);
+    return extra_len < 0 ? 0 : extra_len;
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
