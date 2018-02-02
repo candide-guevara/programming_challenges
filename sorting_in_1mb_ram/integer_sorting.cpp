@@ -7,16 +7,19 @@ buffer_t buid_buffer() {
   return buffer;
 }
 
+const uint32_t lvl2 = 252;
 len_comp_t encode(uint32_t number) {
+  const uint32_t slots = 0xff - lvl2;
+  const uint32_t max_lvl2 = slots * 0x100 + lvl2 - 1;
   len_comp_t result = {1, {{(uint8_t)number}}};
   compress_t& comp = result.second;
 
-  if(number >= 254 && number < 510) {
+  if(number >= lvl2 && number < max_lvl2) {
     result.first = 2;
-    comp[0] = 254;
-    comp[1] = number - 254;
+    comp[0] = (number - lvl2 + 1) / 0x100 + lvl2;
+    comp[1] = (number - lvl2 + 1) % 0x100;
   }
-  if(number >= 510) {
+  else if(number >= max_lvl2) {
     result.first = max_len;
     comp[0] = 255;
     comp[1] = (number & 0xff);
@@ -29,11 +32,11 @@ len_comp_t encode(uint32_t number) {
 
 num_shift_t decode(const uint8_t *start) {
   num_shift_t result = {start[0],1};
-  if(start[0] == 254) {
-    result.first = start[0] + start[1];
+  if(start[0] >= lvl2 && start[0] < 0xff) {
+    result.first = (start[0] - lvl2) * 0x100 + start[1] + lvl2 - 1;
     result.second = 2;
   }
-  if(start[0] == 255) {
+  if(start[0] == 0xff) {
     result.first = start[1] + (start[2] << 8) + (start[3] << 16) + (start[4] << 24);
     result.second = max_len;
   }
@@ -166,7 +169,8 @@ uint32_t validate(const buffer_t& buffer, const std::vector<uint32_t>& ref) {
     auto num_shift = decode(cursor);
     cursor += num_shift.second;
     value += num_shift.first;
-    ++histo[num_shift.first/200];
+    if(num_shift.first < 256) ++histo[num_shift.first];
+    else ++histo[num_shift.first/256 + 1000];
     if(i != value)
       error_count += 1;
   }
