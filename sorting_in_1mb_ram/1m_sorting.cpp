@@ -19,7 +19,7 @@ int_len_t BucketIt::get_and_advance() {
   auto int_len = decompress(start, bit_offset);
   start += (bit_offset+int_len.second) / 8;
   bit_offset = (bit_offset+int_len.second) % 8;
-  MY_ASSERT(start <= end);
+  MY_ASSERT(start < end || (start == end && bit_offset == 0));
   return int_len;
 }
 
@@ -32,7 +32,7 @@ void BucketIt::shift_bits(int32_t len) {
     start += (bit_offset + len) / 8;
     bit_offset = (bit_offset + len) % 8;
   }
-  MY_ASSERT(start <= end);
+  MY_ASSERT(start < end || (start == end && bit_offset == 0));
 }
 
 uint32_t BucketIt::write_and_advance(uint32_t number) {
@@ -277,7 +277,7 @@ uint32_t Buckets::swap(uint32_t from, uint32_t to) {
 
 uint32_t Buckets::shift_bits(uint32_t target, BucketIt start_it, int32_t extra_len) {
   auto bucket_end = end(target);
-  MY_ASSERT(start_it != bucket_end && start_it.start <= ends[target]);
+  MY_ASSERT(start_it.start <= ends[target] && start_it.start >= starts[target]);
   int32_t ov_count = extra_len < 0 ? 
     -extra_len - (start_it - begin(target))
     : extra_len - available(target);
@@ -336,7 +336,6 @@ uint32_t Buckets::add_number(decimal_t decimal) {
     return result;
   }
   else { // begin : insert int the middle
-    uint32_t ok = 0;
     auto start_it = insert_it;
     auto int_len = start_it.get_and_advance();
     uint32_t delta = bucket_int.second - (sum - int_len.first);
@@ -344,21 +343,15 @@ uint32_t Buckets::add_number(decimal_t decimal) {
     int32_t extra_len = compress_len(delta) + compress_len(next) - int_len.second;
     MY_ASSERT(delta < sum && next <= sum && extra_len <= (int32_t)(2*comp_len_4));
 
-    if(extra_len != 0 && start_it != bucket_end) {
-      ok = shift_bits(bucket_int.first, start_it, extra_len);
+    uint32_t ok = shift_bits(bucket_int.first, start_it, extra_len);
+    if (!overflow_count(ok)) {
+      ok = insert_it.write_and_advance(delta);
       MY_ASSERT(!overflow_count(ok));
+      ok = insert_it.write_and_advance(next);
+      MY_ASSERT(!overflow_count(ok));
+      return (extra_len < 0 ? 0 : extra_len);
     }
-    else if(start_it == bucket_end) {
-      bucket_end.shift_bits(extra_len);
-      update(bucket_int.first, bucket_end);
-    }
-    
-    ok = insert_it.write_and_advance(delta);
-    MY_ASSERT(!overflow_count(ok));
-    ok = insert_it.write_and_advance(next);
-    MY_ASSERT(!overflow_count(ok));
-
-    return (extra_len < 0 ? 0 : extra_len);
+    return ok;
   } // end: insert in the middle
 }
 
@@ -861,8 +854,8 @@ Buckets order_numbers_into_buckets(const vector<decimal_t>& input) {
       LOG("raw : " << my_format(buckets));
       assert(false);
     }
-    if(count % (input_len/20) == 0)
-      LOG("buckets stats (" << count << ") = " << print_stats(buckets.calculate_stats()));
+    //if(count % (input_len/20) == 0)
+    //  LOG("buckets stats (" << count << ") = " << print_stats(buckets.calculate_stats()));
     ++count;
   }
   return buckets;

@@ -555,7 +555,7 @@ void test_bucket_add_and_rebalance_fuzzy() {
     fill_bucket(ref_buckets, i, input);
   auto ref_stats = ref_buckets.calculate_stats();
   
-  for(uint32_t attempt = 0; attempt < 10; ++attempt) {
+  for(uint32_t attempt = 0; attempt < 20; ++attempt) {
     buckets.clear();
     buckets.buffer = ref_buckets.buffer;
     buckets.lens = ref_buckets.lens;
@@ -607,7 +607,7 @@ void sort_one_million_in_one_mb() {
 
     for(uint32_t idx=0; idx < input.size(); ++idx, ++global_it) {
       MY_ASSERT(global_it != buckets.global_end());
-      LOG("at " << idx << " : " << my_format(input[idx]) << " != " << my_format(*global_it));
+      //LOG("at " << idx << " : " << my_format(input[idx]) << " != " << my_format(*global_it));
       if(input[idx] != *global_it) 
         ++error_count;
     }
@@ -649,7 +649,7 @@ int main(void) {
   std::cout << IOMANIPS;
 
   test_validation_all();
-  sort_one_million_in_one_mb();
+  //sort_one_million_in_one_mb();
   return 0;
 }
 

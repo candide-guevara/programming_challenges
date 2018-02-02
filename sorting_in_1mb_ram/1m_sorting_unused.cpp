@@ -30,7 +30,6 @@ uint32_t Buckets::_r_extend(uint32_t target, uint32_t amount) {
   return 0;
 }
 
-
 uint32_t Buckets::_swap(uint32_t from, uint32_t to) {
   MY_ASSERT(from != to);
   auto from_wr = begin(from), from_it = begin(from), from_end = end(from);

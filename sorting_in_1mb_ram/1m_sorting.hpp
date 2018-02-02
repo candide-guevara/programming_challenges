@@ -20,7 +20,7 @@ using decimal_t = std::pair<uint32_t, uint32_t>;
 using int_len_t = std::pair<uint32_t, uint32_t>;
 using bucket_int_t = std::pair<uint32_t, uint32_t>;
 
-const static size_t input_len = 10000000;
+const static size_t input_len = 1000000;
 const static size_t max_rand  = 899999999;
 const static size_t rand_msk  = 100000000;
 const static size_t comp_len_1 = 7;
