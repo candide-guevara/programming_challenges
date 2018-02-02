@@ -80,11 +80,11 @@ std::string print_raw_bucket(const uint8_t* start, size_t len) {
 
 std::string print_stats(const StatBuckets& stats) {
   auto ss = build_stringstream();
-  ss << "{ min_cap=" << my_format(stats.min_cap) << " min_avail=" << my_format(stats.min_avail);
-  ss << " max_cap=" <<  my_format(stats.max_cap) << " max_avail=" << my_format(stats.max_avail) << std::endl;
-  ss << " avg_avail=" << stats.avg_avail;
-  ss << " std_cap=" << stats.std_cap << " std_avail=" << stats.std_avail << std::endl;
-  ss << " tot_avail=" << stats.tot_avail << " tot_len=" << stats.tot_len << std::endl;
+  ss << "{ min_cap_byte=" << my_format(stats.min_cap) << " min_avail_bit=" << my_format(stats.min_avail);
+  ss << " max_cap_byte=" <<  my_format(stats.max_cap) << " max_avail_bit=" << my_format(stats.max_avail) << std::endl;
+  ss << " avg_avail_bit=" << stats.avg_avail;
+  ss << " std_cap_byte=" << stats.std_cap << " std_avail_bit=" << stats.std_avail << std::endl;
+  ss << " tot_avail_kb=" << stats.tot_avail << " tot_len_kb=" << stats.tot_len << std::endl;
   ss << " len_histo=" << print_collection(stats.len_histo) << std::endl;
   ss << " val_histo=" << print_collection(stats.val_histo) << std::endl;
   ss << " }" << std::endl;

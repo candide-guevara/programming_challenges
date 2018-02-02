@@ -648,8 +648,8 @@ void test_validation_all() {
 int main(void) {
   std::cout << IOMANIPS;
 
-  test_validation_all();
-  //sort_one_million_in_one_mb();
+  //test_validation_all();
+  sort_one_million_in_one_mb();
   return 0;
 }
 

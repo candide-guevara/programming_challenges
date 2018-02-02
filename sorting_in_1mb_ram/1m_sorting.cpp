@@ -162,26 +162,26 @@ StatBuckets Buckets::calculate_stats() const {
     std_avail += (avg_avail - available(i))*(avg_avail - available(i)); 
     for(auto val : at(i)) {
       ++len_histo[compress_len(val)];
-      if(val >= bias - comp_max_1 && val <= bias + comp_max_1)
+      if(val <= 2 * bias)
         ++val_histo[val/window];
-      if(val >= comp_max_2-5*window && val < comp_max_2)
-        ++val_histo[val/window];
-      if(val >= comp_max_3-500*window && val < comp_max_3)
-        ++val_histo[val/100*window];
+      else if(val <= comp_max_2)
+        ++val_histo[10*bias/window + val/10*window];
+      else if(val <= comp_max_3)
+        ++val_histo[1000*bias/window + val/100*window];
     }
   }
   
   StatBuckets stats = {
-    select_bigger<true>([this](uint32_t i) { return capacity(i); }),
+    select_bigger<true>([this](uint32_t i) { return capacity(i)/8; }),
     select_bigger<true>([this](uint32_t i) { return available(i); }),
-    select_bigger([this](uint32_t i) { return capacity(i); }),
+    select_bigger([this](uint32_t i) { return capacity(i)/8; }),
     select_bigger([this](uint32_t i) { return available(i); }),
     avg_cap,
     avg_avail,
-    std::sqrt(std_cap / buffer_len),
+    std::sqrt(std_cap / buffer_len) / 8,
     std::sqrt(std_avail / bucket_len),
-    std::accumulate(lens.begin(), lens.end(), 0u),
-    tot_avail,
+    std::accumulate(lens.begin(), lens.end(), 0u) / 8912,
+    tot_avail / 8192,
     std::move(len_histo),
     std::move(val_histo),
   };
@@ -534,6 +534,8 @@ bool comp_decimal(decimal_t lhs, decimal_t rhs) {
   //return lhs.first * pow(10, -lhs.second) < rhs.first * pow(10, -rhs.second);
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, uint8_t* end) {
   MY_ASSERT(bit_offset < 8);
   auto comp = compress(number);
@@ -602,43 +604,37 @@ uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, u
 comp_int_t compress(uint32_t number) {
   MY_ASSERT(number < comp_max_4);
   comp_int_t comp;
-  int32_t biased = number - bias;
-  uint32_t zigzag = (biased >> 31) ^ (biased << 1);
 
-  if(zigzag < comp_max_1) {
-    comp[0] = (zigzag & 0x3f);
+  if(number < comp_max_1) {
+    comp[0] = (number & 0x3f);
   }
-  else if(zigzag < comp_max_2) {
-    comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
-    comp[1] = ((zigzag >> 7) & 0x3f);
+  else if(number < comp_max_2) {
+    comp[0] = (number & 0x3f) | 0x40 | ((number << 1) & 0x80);
+    comp[1] = ((number >> 7) & 0x3f);
     MY_ASSERT(comp[0] > 0);
   }
-  else if(zigzag < comp_max_3) {
-    comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
-    comp[1] = ((zigzag >> 7) & 0x3f) | 0x40 | ((zigzag >> 6) & 0x80);
-    comp[2] = (zigzag >> 14) & 0x7f;
+  else if(number < comp_max_3) {
+    comp[0] = (number & 0x3f) | 0x40 | ((number << 1) & 0x80);
+    comp[1] = ((number >> 7) & 0x3f) | 0x40 | ((number >> 6) & 0x80);
+    comp[2] = (number >> 14) & 0x7f;
     MY_ASSERT(comp[0] > 0 && comp[1] > 0);
   }
   else {
-    comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
-    comp[1] = ((zigzag >> 7) & 0x3f) | 0x40 | ((zigzag >> 6) & 0x80);
-    comp[2] = ((zigzag >> 14) & 0x7f) | 0x80;
-    comp[3] = (zigzag >> 21) & 0xff;
+    comp[0] = (number & 0x3f) | 0x40 | ((number << 1) & 0x80);
+    comp[1] = ((number >> 7) & 0x3f) | 0x40 | ((number >> 6) & 0x80);
+    comp[2] = ((number >> 14) & 0x7f) | 0x80;
+    comp[3] = (number >> 21) & 0xff;
     MY_ASSERT(comp[0] > 0 && comp[1] > 0 && comp[2] > 0);
   }
   return comp;
 }
 
 size_t compress_len(uint32_t number) {
-  const int32_t lower_bound1 = comp_max_1/2;
-  const int32_t lower_bound2 = comp_max_2/2;
-  const int32_t lower_bound3 = comp_max_3/2;
-  int32_t biased = number - bias;
-  if(biased >= -lower_bound1 && biased < lower_bound1)
+  if(number < comp_max_1)
     return comp_len_1;
-  if(biased >= -lower_bound2 && biased < lower_bound2)
+  if(number < comp_max_2)
     return comp_len_2;
-  if(biased >= -lower_bound3 && biased < lower_bound3)
+  if(number < comp_max_3)
     return comp_len_3;
   return comp_len_4;
 }
@@ -686,34 +682,30 @@ int_len_t decompress(uint8_t* start, uint8_t bit_offset) {
 
 uint32_t decompress(comp_int_t comp) {
   if((comp[0] & 0x40) == 0) {
-    int32_t zigzag = comp[0] & 0x3f;
-    MY_ASSERT((uint32_t)zigzag < comp_max_1);
-    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
-    return zigzag + bias;
+    int32_t number = comp[0] & 0x3f;
+    MY_ASSERT((uint32_t)number < comp_max_1);
+    return number;
   }
   if((comp[1] & 0x40) == 0) {
-    int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
-    zigzag         |= ((comp[1] >> 1) & 0x1f) << 8;
-    MY_ASSERT((uint32_t)zigzag < comp_max_2);
-    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
-    return zigzag + bias;
+    int32_t number = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    number         |= ((comp[1] >> 1) & 0x1f) << 8;
+    MY_ASSERT((uint32_t)number < comp_max_2);
+    return number;
   }
   if((comp[2] & 0x80) == 0) {
-    int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
-    zigzag         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
-    zigzag         |= ( ((comp[2] >> 2) & 0x1f) ) << 16;
-    MY_ASSERT((uint32_t)zigzag < comp_max_3);
-    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
-    return zigzag + bias;
+    int32_t number = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    number         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
+    number         |= ( ((comp[2] >> 2) & 0x1f) ) << 16;
+    MY_ASSERT((uint32_t)number < comp_max_3);
+    return number;
   }
   else {
     MY_ASSERT(comp[3] > 0);
-    int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
-    zigzag         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
-    zigzag         |= ( ((comp[2] >> 2) & 0x1f) | ((comp[3] << 5) & 0xe0) ) << 16;
-    zigzag         |= ( ((comp[3] >> 3) & 0x1f) ) << 24;
-    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
-    return zigzag + bias;
+    int32_t number = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    number         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
+    number         |= ( ((comp[2] >> 2) & 0x1f) | ((comp[3] << 5) & 0xe0) ) << 16;
+    number         |= ( ((comp[3] >> 3) & 0x1f) ) << 24;
+    return number;
   }
 }
 

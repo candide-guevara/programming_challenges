@@ -116,6 +116,261 @@ uint32_t Buckets::_add_number(decimal_t decimal) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+uint32_t _write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, uint8_t* end) {
+  MY_ASSERT(bit_offset < 8);
+  auto comp = compress(number);
+  int32_t extra_len = bit_offset + compress_len(comp) - 8*(end - start);
+
+  if(extra_len > 0)
+    return make_ov_error(extra_len);
+
+  if(bit_offset == 0 && (comp[0] & 0x40) == 0) {
+    start[0] = (comp[0] & 0x3f) | (start[0] & 0x80);
+    return comp_len_1;
+  }
+  if(bit_offset == 1 && (comp[0] & 0x40) == 0) {
+    start[0] = (comp[0] << 1) | (start[0] & 0x01);
+    return comp_len_1;
+  }
+  if(bit_offset > 1 && (comp[0] & 0x40) == 0) {
+    start[0] = (comp[0] << bit_offset) | (start[0] & ((1 << bit_offset) - 1));
+    start[1] = (start[1] & ~((1 << (bit_offset-1)) - 1)) | ((comp[0] & 0x7f) >> (8-bit_offset));
+    return comp_len_1;
+  }
+  if(bit_offset == 0 && (comp[1] & 0x40) == 0) {
+    start[0] = comp[0];
+    start[1] = (comp[1] & 0x3f) | (start[1] & 0x80);
+    return comp_len_2;
+  }
+  if(bit_offset == 1 && (comp[1] & 0x40) == 0) {
+    start[0] = (comp[0] << 1) | (start[0] & 0x01);
+    start[1] = (comp[0] >> 7) | (comp[1] << 1);
+    return comp_len_2;
+  }
+  if(bit_offset > 1 && (comp[1] & 0x40) == 0) {
+    start[0] = (comp[0] << bit_offset) | (start[0] & ((1 << bit_offset) - 1));
+    start[1] = (comp[0] >> (8-bit_offset)) | (comp[1] << bit_offset);
+    start[2] = (start[2] & ~((1 << (bit_offset-1)) - 1)) | ((comp[1] & 0x7f) >> (8-bit_offset));
+    return comp_len_2;
+  }
+  if(bit_offset == 0 && (comp[2] & 0x80) == 0) {
+    start[0] = comp[0];
+    start[1] = comp[1];
+    start[2] = comp[2];
+    return comp_len_3;
+  }
+  if(bit_offset > 0 && (comp[2] & 0x80) == 0) {
+    start[0] = (comp[0] << bit_offset) | (start[0] & ((1 << bit_offset) - 1));
+    start[1] = (comp[0] >> (8-bit_offset)) | (comp[1] << bit_offset);
+    start[2] = (comp[1] >> (8-bit_offset)) | (comp[2] << bit_offset);
+    start[3] = (start[3] & ~((1 << bit_offset) - 1)) | (comp[2] >> (8-bit_offset));
+    return comp_len_3;
+  }
+  if(bit_offset == 0) {
+    start[0] = comp[0];
+    start[1] = comp[1];
+    start[2] = comp[2];
+    start[3] = comp[3];
+    return comp_len_4;
+  }
+  start[0] = (comp[0] << bit_offset) | (start[0] & ((1 << bit_offset) - 1));
+  start[1] = (comp[0] >> (8-bit_offset)) | (comp[1] << bit_offset);
+  start[2] = (comp[1] >> (8-bit_offset)) | (comp[2] << bit_offset);
+  start[3] = (comp[2] >> (8-bit_offset)) | (comp[3] << bit_offset);
+  start[4] = (start[4] & ~((1 << bit_offset) - 1)) | (comp[3] >> (8-bit_offset));
+  return comp_len_4;
+}
+
+size_t _compress_len(comp_int_t comp) {
+  if(!(comp[0] & 0x40))
+    return comp_len_1;
+  if(!(comp[1] & 0x40))
+    return comp_len_2;
+  if(!(comp[2] & 0x80))
+    return comp_len_3;
+  return comp_len_4;
+}
+
+int_len_t _decompress(uint8_t* start, uint8_t bit_offset) {
+  comp_int_t comp;
+  comp[0] = (start[0] >> bit_offset);
+  if(bit_offset)
+    comp[0] |= (start[1] << (8-bit_offset));
+  if((comp[0] & 0x40) == 0) {
+    comp[0] &= 0x7f;
+    return make_pair(decompress(comp), comp_len_1);
+  }
+
+  comp[1] = (start[1] >> bit_offset);
+  if(bit_offset)
+    comp[1] |= (start[2] << (8-bit_offset));
+  if((comp[1] & 0x40) == 0) {
+    comp[1] &= 0x7f;
+    return make_pair(decompress(comp), comp_len_2);
+  }
+
+  comp[2] = (start[2] >> bit_offset);
+  if(bit_offset)
+    comp[2] |= (start[3] << (8-bit_offset));
+  if((comp[2] & 0x80) == 0) {
+    return make_pair(decompress(comp), comp_len_3);
+  }
+
+  comp[3] = (start[3] >> bit_offset);
+  if(bit_offset)
+    comp[3] |= (start[4] << (8-bit_offset));
+  return make_pair(decompress(comp), comp_len_4);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+comp_int_t _zigzag_compress(uint32_t number) {
+  MY_ASSERT(number < comp_max_4);
+  comp_int_t comp;
+  int32_t biased = number - bias;
+  uint32_t zigzag = (biased >> 31) ^ (biased << 1);
+
+  if(zigzag < comp_max_1) {
+    comp[0] = (zigzag & 0x3f);
+  }
+  else if(zigzag < comp_max_2) {
+    comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
+    comp[1] = ((zigzag >> 7) & 0x3f);
+    MY_ASSERT(comp[0] > 0);
+  }
+  else if(zigzag < comp_max_3) {
+    comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
+    comp[1] = ((zigzag >> 7) & 0x3f) | 0x40 | ((zigzag >> 6) & 0x80);
+    comp[2] = (zigzag >> 14) & 0x7f;
+    MY_ASSERT(comp[0] > 0 && comp[1] > 0);
+  }
+  else {
+    comp[0] = (zigzag & 0x3f) | 0x40 | ((zigzag << 1) & 0x80);
+    comp[1] = ((zigzag >> 7) & 0x3f) | 0x40 | ((zigzag >> 6) & 0x80);
+    comp[2] = ((zigzag >> 14) & 0x7f) | 0x80;
+    comp[3] = (zigzag >> 21) & 0xff;
+    MY_ASSERT(comp[0] > 0 && comp[1] > 0 && comp[2] > 0);
+  }
+  return comp;
+}
+
+size_t _zigzag_compress_len(uint32_t number) {
+  const int32_t lower_bound1 = comp_max_1/2;
+  const int32_t lower_bound2 = comp_max_2/2;
+  const int32_t lower_bound3 = comp_max_3/2;
+  int32_t biased = number - bias;
+  if(biased >= -lower_bound1 && biased < lower_bound1)
+    return comp_len_1;
+  if(biased >= -lower_bound2 && biased < lower_bound2)
+    return comp_len_2;
+  if(biased >= -lower_bound3 && biased < lower_bound3)
+    return comp_len_3;
+  return comp_len_4;
+}
+
+uint32_t _zigzag_decompress(comp_int_t comp) {
+  if((comp[0] & 0x40) == 0) {
+    int32_t zigzag = comp[0] & 0x3f;
+    MY_ASSERT((uint32_t)zigzag < comp_max_1);
+    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
+    return zigzag + bias;
+  }
+  if((comp[1] & 0x40) == 0) {
+    int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    zigzag         |= ((comp[1] >> 1) & 0x1f) << 8;
+    MY_ASSERT((uint32_t)zigzag < comp_max_2);
+    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
+    return zigzag + bias;
+  }
+  if((comp[2] & 0x80) == 0) {
+    int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    zigzag         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
+    zigzag         |= ( ((comp[2] >> 2) & 0x1f) ) << 16;
+    MY_ASSERT((uint32_t)zigzag < comp_max_3);
+    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
+    return zigzag + bias;
+  }
+  else {
+    MY_ASSERT(comp[3] > 0);
+    int32_t zigzag = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    zigzag         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
+    zigzag         |= ( ((comp[2] >> 2) & 0x1f) | ((comp[3] << 5) & 0xe0) ) << 16;
+    zigzag         |= ( ((comp[3] >> 3) & 0x1f) ) << 24;
+    zigzag = (static_cast<uint32_t>(zigzag) >> 1u) ^ -(zigzag & 1);
+    return zigzag + bias;
+  }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+comp_int_t _unbiased_compress(uint32_t number) {
+  MY_ASSERT(number < comp_max_4);
+  comp_int_t comp;
+
+  if(number < comp_max_1) {
+    comp[0] = (number & 0x3f);
+  }
+  else if(number < comp_max_2) {
+    comp[0] = (number & 0x3f) | 0x40 | ((number << 1) & 0x80);
+    comp[1] = ((number >> 7) & 0x3f);
+    MY_ASSERT(comp[0] > 0);
+  }
+  else if(number < comp_max_3) {
+    comp[0] = (number & 0x3f) | 0x40 | ((number << 1) & 0x80);
+    comp[1] = ((number >> 7) & 0x3f) | 0x40 | ((number >> 6) & 0x80);
+    comp[2] = (number >> 14) & 0x7f;
+    MY_ASSERT(comp[0] > 0 && comp[1] > 0);
+  }
+  else {
+    comp[0] = (number & 0x3f) | 0x40 | ((number << 1) & 0x80);
+    comp[1] = ((number >> 7) & 0x3f) | 0x40 | ((number >> 6) & 0x80);
+    comp[2] = ((number >> 14) & 0x7f) | 0x80;
+    comp[3] = (number >> 21) & 0xff;
+    MY_ASSERT(comp[0] > 0 && comp[1] > 0 && comp[2] > 0);
+  }
+  return comp;
+}
+
+size_t _unbiased_compress_len(uint32_t number) {
+  if(number < comp_max_1)
+    return comp_len_1;
+  if(number < comp_max_2)
+    return comp_len_2;
+  if(number < comp_max_3)
+    return comp_len_3;
+  return comp_len_4;
+}
+
+uint32_t _unbiased_decompress(comp_int_t comp) {
+  if((comp[0] & 0x40) == 0) {
+    int32_t number = comp[0] & 0x3f;
+    MY_ASSERT((uint32_t)number < comp_max_1);
+    return number;
+  }
+  if((comp[1] & 0x40) == 0) {
+    int32_t number = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    number         |= ((comp[1] >> 1) & 0x1f) << 8;
+    MY_ASSERT((uint32_t)number < comp_max_2);
+    return number;
+  }
+  if((comp[2] & 0x80) == 0) {
+    int32_t number = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    number         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
+    number         |= ( ((comp[2] >> 2) & 0x1f) ) << 16;
+    MY_ASSERT((uint32_t)number < comp_max_3);
+    return number;
+  }
+  else {
+    MY_ASSERT(comp[3] > 0);
+    int32_t number = (comp[0] & 0x3f) | ((comp[0] >> 1) & 0x40) | ((comp[1] << 7) & 0x80) ;
+    number         |= ( ((comp[1] >> 1) & 0x1f) | ((comp[1] >> 2) & 0x20) | ((comp[2] << 6) & 0xc0) ) << 8;
+    number         |= ( ((comp[2] >> 2) & 0x1f) | ((comp[3] << 5) & 0xe0) ) << 16;
+    number         |= ( ((comp[3] >> 3) & 0x1f) ) << 24;
+    return number;
+  }
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /*
 void test_bucket_swap_same_len() {
   auto buckets = build_and_fill_first_bucket();
