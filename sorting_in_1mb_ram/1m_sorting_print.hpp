@@ -7,7 +7,7 @@
 #define LOG(msg) std::cout << msg << std::endl;
 //#define STRAT_LOG(num, msg) std::cout << "strategy " << num << " : " << msg << std::endl;
 #define STRAT_LOG(num, msg) 
-#define IOMANIPS std::scientific << std::setprecision(7) << std::dec
+#define IOMANIPS std::scientific << std::setprecision(2) << std::dec
 #define TEST_HEADER() LOG(__PRETTY_FUNCTION__ << " start")
 
 namespace {
@@ -80,11 +80,12 @@ std::string print_raw_bucket(const uint8_t* start, size_t len) {
 
 std::string print_stats(const StatBuckets& stats) {
   auto ss = build_stringstream();
-  ss << "{ min_cap_byte=" << my_format(stats.min_cap) << " min_avail_bit=" << my_format(stats.min_avail);
-  ss << " max_cap_byte=" <<  my_format(stats.max_cap) << " max_avail_bit=" << my_format(stats.max_avail) << std::endl;
-  ss << " avg_avail_bit=" << stats.avg_avail;
-  ss << " std_cap_byte=" << stats.std_cap << " std_avail_bit=" << stats.std_avail << std::endl;
-  ss << " tot_avail_kb=" << stats.tot_avail << " tot_len_kb=" << stats.tot_len << std::endl;
+  ss << "{ item_count=" << stats.item_count << std::endl;
+  ss << " min_cap_kb=" << my_format(stats.min_cap_kb) << " min_avail_byte=" << my_format(stats.min_avail_byte);
+  ss << " max_cap_kb=" <<  my_format(stats.max_cap_kb) << " max_avail_byte=" << my_format(stats.max_avail_byte) << std::endl;
+  ss << " avg_avail_byte=" << stats.avg_avail_byte;
+  ss << " std_cap_byte=" << stats.std_cap_byte << " std_avail_byte=" << stats.std_avail_byte << std::endl;
+  ss << " tot_avail_kb=" << stats.tot_avail_kb << " tot_len_kb=" << stats.tot_len_kb << std::endl;
   ss << " len_histo=" << print_collection(stats.len_histo) << std::endl;
   ss << " val_histo=" << print_collection(stats.val_histo) << std::endl;
   ss << " }" << std::endl;

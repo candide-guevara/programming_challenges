@@ -15,24 +15,18 @@
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-using comp_int_t = std::array<uint8_t,4>;
-using decimal_t = std::pair<uint32_t, uint32_t>;
-using int_len_t = std::pair<uint32_t, uint32_t>;
-using bucket_int_t = std::pair<uint32_t, uint32_t>;
-
 const static size_t input_len = 1000000;
 const static size_t max_rand  = 899999999;
 const static size_t rand_msk  = 100000000;
-const static size_t comp_len_1 = 7;
-const static size_t comp_len_2 = 15;
-const static size_t comp_len_3 = 24;
-const static size_t comp_len_4 = 32;
-const static size_t comp_max_1 = (1 << (comp_len_1 - 1));
-const static size_t comp_max_2 = (1 << (comp_len_2 - 2));
-const static size_t comp_max_3 = (1 << (comp_len_3 - 3));
-const static size_t comp_max_4 = (1 << (comp_len_4 - 3));
-const static size_t safe_buf_len = comp_len_4 / comp_len_1 + 1;
-const static size_t safe_bucket_inc = 2 * comp_len_4 / 8;
+const static size_t comp_len_1 = 8;
+const static size_t comp_len_2 = 16;
+const static size_t comp_len_3 = 32;
+const static size_t comp_len_4 = 40;
+const static size_t comp_max_1 = 241;
+const static size_t comp_max_2 = 3568;
+const static size_t comp_max_3 = (1 << 23);
+const static size_t comp_max_4 = (1 << 31);
+const static size_t safe_bucket_inc = 2 * comp_len_3 / 8;
 const static size_t decimal_places = 9;
 const static size_t bucket_family_len = 10;
 const static size_t bucket_max_value = rand_msk / bucket_family_len - 1;
@@ -40,6 +34,12 @@ const static size_t bucket_val_mask = rand_msk / bucket_family_len;
 const static size_t bucket_len = bucket_family_len * decimal_places;
 const static size_t buffer_len = input_len * 1.90;
 const static size_t bias = bucket_val_mask * bucket_len / input_len;
+
+using comp_int_t = std::array<uint8_t, comp_len_4/8>;
+using decimal_t = std::pair<uint32_t, uint32_t>;
+using int_len_t = std::pair<uint32_t, uint32_t>;
+using bucket_int_t = std::pair<uint32_t, uint32_t>;
+using bucket_stat_t = std::pair<uint32_t, double>;
 
 struct Buckets;
 
@@ -96,11 +96,12 @@ struct ItContainer {
 
 struct StatBuckets {
   using Histo = std::map<uint32_t, uint32_t>;
-  bucket_int_t min_cap, min_avail;
-  bucket_int_t max_cap, max_avail;
-  double avg_cap, avg_avail;
-  double std_cap, std_avail;
-  uint32_t tot_len, tot_avail;
+  uint32_t item_count;
+  bucket_stat_t min_cap_kb, min_avail_byte;
+  bucket_stat_t max_cap_kb, max_avail_byte;
+  double avg_cap_byte, avg_avail_byte;
+  double std_cap_byte, std_avail_byte;
+  double tot_len_kb, tot_avail_kb;
   Histo len_histo, val_histo;
 };
 
@@ -129,7 +130,7 @@ struct Buckets {
   uint32_t steal_expand(uint32_t target, uint32_t max_expand);
 
   template<bool invert=false, class F>
-  bucket_int_t select_bigger(F) const;
+  bucket_stat_t select_bigger(F) const;
   template<class F>
   uint32_t select_first(F) const;
   template<class F, class R>
@@ -180,10 +181,10 @@ bool comp_decimal(decimal_t lhs, decimal_t rhs);
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<bool invert, class F>
-bucket_int_t Buckets::select_bigger(F selector) const {
-  bucket_int_t biggest = {0, invert? rand_msk : 0};
+bucket_stat_t Buckets::select_bigger(F selector) const {
+  bucket_stat_t biggest = {0, invert? rand_msk : 0};
   for(uint32_t i=0; i < bucket_len; ++i) {
-    uint32_t quant = selector(i); 
+    double quant = selector(i); 
     if(invert && quant < biggest.second) 
       biggest = std::make_pair(i, quant);
     if(!invert && quant > biggest.second) 

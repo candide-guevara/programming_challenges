@@ -3,6 +3,7 @@
 #include <list>
 
 using namespace std;
+const static size_t safe_buf_len = comp_len_4 / comp_len_1 + 1;
 
 uint32_t Buckets::_r_extend(uint32_t target, uint32_t amount) {
   MY_ASSERT(amount);
@@ -372,6 +373,25 @@ uint32_t _unbiased_decompress(comp_int_t comp) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
+void _test_compress_len() {
+  int32_t lower_bound1 = (comp_max_1>>1) <= bias ? (comp_max_1>>1) : bias;
+  int32_t lower_bound2 = (comp_max_2>>1) <= bias ? (comp_max_2>>1) : bias;
+
+  for(int32_t n=-lower_bound1; n<(int32_t)(comp_max_1>>1); ++n)
+    MY_ASSERT(compress_len(bias + n) == comp_len_1);
+  for(int32_t n=-lower_bound2; n<(int32_t)(comp_max_2>>1); ++n)
+    if(n<-(int32_t)(comp_max_1>>1) || n>=(int32_t)(comp_max_1>>1))
+      MY_ASSERT(compress_len(bias + n) == comp_len_2);
+  for(auto n : generate_rand_uint_input(1000000, comp_max_3/2 - 1))
+    if(n>=(int32_t)(comp_max_2>>1))
+      MY_ASSERT(compress_len(bias + n) == comp_len_3);
+
+  MY_ASSERT(compress_len(bias + comp_max_3/2) == comp_len_4);
+  MY_ASSERT(compress_len(bias + comp_max_3/2 + 1) == comp_len_4);
+  MY_ASSERT(compress_len(bias + comp_max_3/2 - 1) == comp_len_3);
+  MY_ASSERT(compress_len(bias + comp_max_3) == comp_len_4);
+}
+
 void test_bucket_swap_same_len() {
   auto buckets = build_and_fill_first_bucket();
 

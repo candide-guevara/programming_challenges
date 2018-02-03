@@ -14,7 +14,7 @@ void compare_bucket_to_ref(const vector<uint32_t>& ref_vect, ItContainer<BucketI
   for(auto value : bucket) {
     auto ref = ref_vect[idx++];
     if (ref != value) {
-      LOG(ref << " " << value);
+      LOG("mismatch at " << idx << " : " << ref << " != " << value);
       MY_ASSERT(ref == value);
     }
   }
@@ -26,10 +26,19 @@ void compare_deltas_to_ref(const vector<uint32_t>& ref_vect, ItContainer<BucketI
     auto ref = ref_vect[idx++];
     sum += n;
     if(ref != sum) {
-      LOG(n << " " << sum << " " << ref);
+      LOG("mismatch at " << n << " : " << sum << " != " << ref);
       MY_ASSERT(ref == sum);
     }
   }
+}
+
+void fill_bucket_to_max(Buckets& buckets, uint32_t target, uint32_t value) {
+  auto write_it = buckets.at(target).begin();
+  uint32_t ok = 0;
+  while(!overflow_count(ok)) 
+    ok = write_it.write_and_advance(value);
+  buckets.update(target, write_it);
+  MY_ASSERT(buckets.available(target) < comp_len_4);
 }
 
 void fill_bucket(Buckets& buckets, uint32_t target, const vector<uint32_t>& ref_vect) {
@@ -136,22 +145,17 @@ void test_bucket_iteration() {
 
 void test_compress_len() {
   TEST_HEADER();
-  int32_t lower_bound1 = (comp_max_1>>1) <= bias ? (comp_max_1>>1) : bias;
-  int32_t lower_bound2 = (comp_max_2>>1) <= bias ? (comp_max_2>>1) : bias;
+  for(uint32_t number=0; number<comp_max_1; ++number)
+    MY_ASSERT(compress_len(number) == comp_len_1);
 
-  for(int32_t n=-lower_bound1; n<(int32_t)(comp_max_1>>1); ++n)
-    MY_ASSERT(compress_len(bias + n) == comp_len_1);
-  for(int32_t n=-lower_bound2; n<(int32_t)(comp_max_2>>1); ++n)
-    if(n<-(int32_t)(comp_max_1>>1) || n>=(int32_t)(comp_max_1>>1))
-      MY_ASSERT(compress_len(bias + n) == comp_len_2);
-  for(auto n : generate_rand_uint_input(1000000, comp_max_3/2 - 1))
-    if(n>=(int32_t)(comp_max_2>>1))
-      MY_ASSERT(compress_len(bias + n) == comp_len_3);
+  for(uint32_t number=comp_max_1; number<comp_max_2; ++number)
+    MY_ASSERT(compress_len(number) == comp_len_2);
 
-  MY_ASSERT(compress_len(bias + comp_max_3/2) == comp_len_4);
-  MY_ASSERT(compress_len(bias + comp_max_3/2 + 1) == comp_len_4);
-  MY_ASSERT(compress_len(bias + comp_max_3/2 - 1) == comp_len_3);
-  MY_ASSERT(compress_len(bias + comp_max_3) == comp_len_4);
+  for(auto n : generate_rand_uint_input(1000000, comp_max_3 - comp_max_2 - 1))
+    MY_ASSERT(compress_len(comp_max_2 + n) == comp_len_3);
+
+  MY_ASSERT(compress_len(comp_max_3 - 1) == comp_len_3);
+  MY_ASSERT(compress_len(comp_max_3) == comp_len_4);
 }
 
 void test_bucket_algorithm() {
@@ -184,9 +188,9 @@ void test_bucket_algorithm() {
 void test_codec_fuzzy() {
   TEST_HEADER();
   uint32_t idx = 0;
-  auto decimals = generate_rand_decimal_input(1000 * 1000 * 10);
+  auto decimals = generate_rand_decimal_input(10 * input_len);
   vector<uint8_t> buffer;
-  buffer.resize(decimals.size() * 4);
+  buffer.resize(decimals.size() * comp_len_4/8);
   BucketIt write_it {buffer.data(), buffer.data() + buffer.size(), 0};
   BucketIt start_it {buffer.data(), buffer.data() + buffer.size(), 0};
 
@@ -422,6 +426,82 @@ void test_bucket_fail_shift_bits() {
   MY_ASSERT(start_it.start == buckets.starts[1]+3);
 }
 
+void test_bucket_overflow_shift_bits() {
+  TEST_HEADER();
+  auto buckets = build_buckets();
+  fill_bucket_to_max(buckets, 0, comp_max_1 - 1);
+
+  auto start_it = buckets.begin(0);
+  start_it.shift_bits(buckets.capacity(0));
+  uint32_t ok = buckets.shift_bits(0, start_it, 1);
+  MY_ASSERT(overflow_count(ok));
+  MY_ASSERT(buckets.starts[1][0] == 0);
+
+  start_it = buckets.begin(0);
+  start_it.shift_bits(buckets.capacity(0) - 7);
+  ok = buckets.shift_bits(0, start_it, 1);
+  MY_ASSERT(overflow_count(ok));
+  MY_ASSERT(buckets.starts[1][0] == 0);
+
+  auto end_prev = buckets.end(0);
+  start_it = buckets.begin(0);
+  start_it.shift_bits(buckets.capacity(0) - 17);
+  ok = buckets.shift_bits(0, start_it, 0);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(buckets.starts[1][0] == 0);
+  MY_ASSERT(end_prev == buckets.end(0));
+
+  end_prev = buckets.end(0);
+  end_prev.shift_bits(-8);
+  buckets.update(0, end_prev);
+  ok = buckets.shift_bits(0, end_prev, 6);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(buckets.starts[1][0] == 0);
+  MY_ASSERT(end_prev != buckets.end(0));
+
+  fill_bucket_to_max(buckets, 0, comp_max_1 - 1);
+  end_prev = buckets.end(0);
+  end_prev.shift_bits(-8);
+  buckets.update(0, end_prev);
+  ok = buckets.shift_bits(0, end_prev, 8);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(buckets.starts[1][0] == 0);
+
+  fill_bucket_to_max(buckets, 0, comp_max_1 - 1);
+  end_prev = buckets.end(0);
+  end_prev.shift_bits(-8);
+  buckets.update(0, end_prev);
+  end_prev.shift_bits(-1);
+  ok = buckets.shift_bits(0, end_prev, 8);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(buckets.starts[1][0] == 0);
+
+  fill_bucket_to_max(buckets, 0, comp_max_1 - 1);
+  end_prev = buckets.end(0);
+  end_prev.shift_bits(-8);
+  buckets.update(0, end_prev);
+  end_prev.shift_bits(-16);
+  ok = buckets.shift_bits(0, end_prev, 8);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(buckets.starts[1][0] == 0);
+
+  fill_bucket_to_max(buckets, 0, 0);
+  fill_bucket_to_max(buckets, 1, comp_max_1 - 1);
+  start_it = buckets.begin(1);
+  start_it.shift_bits(17);
+  ok = buckets.shift_bits(1, start_it, -8);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(*(buckets.starts[1]-1) == 0);
+
+  fill_bucket_to_max(buckets, 0, 0);
+  fill_bucket_to_max(buckets, 1, comp_max_1 - 1);
+  start_it = buckets.begin(1);
+  start_it.shift_bits(16);
+  ok = buckets.shift_bits(1, start_it, -8);
+  MY_ASSERT(!overflow_count(ok));
+  MY_ASSERT(*(buckets.starts[1]-1) == 0);
+}
+
 void test_add_number() {
   TEST_HEADER();
   vector<uint32_t> input = { 0, 0, 1, 1, 3, 5, 5, 7, 9, 12, 14, 14 };
@@ -547,10 +627,14 @@ void test_bucket_add_and_rebalance() {
 void test_bucket_add_and_rebalance_fuzzy() {
   TEST_HEADER();
   const uint32_t fill_val = 0;
+  const double ratio = 1.0 * comp_len_1 / comp_len_3;
+  const double fill_frac = 0.75;
+  const double balance_frac = ((1-fill_frac) * ratio) * 1.31; // tweaked to almost overflow buckets
+
   auto buckets = build_buckets();
   auto ref_buckets = build_buckets();
   uint32_t ref_cap = ref_buckets.capacity(0) / compress_len(fill_val);
-  vector<uint32_t> input(0.9 * ref_cap, fill_val);
+  vector<uint32_t> input(fill_frac * ref_cap, fill_val);
   for(uint32_t i=0; i<bucket_len; ++i) 
     fill_bucket(ref_buckets, i, input);
   auto ref_stats = ref_buckets.calculate_stats();
@@ -559,7 +643,7 @@ void test_bucket_add_and_rebalance_fuzzy() {
     buckets.clear();
     buckets.buffer = ref_buckets.buffer;
     buckets.lens = ref_buckets.lens;
-    auto extra_input = generate_rand_decimal_input(0.05 * bucket_len * ref_cap);
+    auto extra_input = generate_rand_decimal_input(balance_frac * ref_cap * bucket_len);
     extra_input.erase(std::remove_if(extra_input.begin(), extra_input.end(), 
       [](decimal_t d) { return d.first % bucket_val_mask == 0; }));
 
@@ -569,16 +653,16 @@ void test_bucket_add_and_rebalance_fuzzy() {
     }
 
     std::sort(extra_input.begin(), extra_input.end(), comp_decimal);
-    //LOG(print_collection(extra_input));
     auto stats = buckets.calculate_stats();
-    MY_ASSERT(stats.tot_len > ref_stats.tot_len);
-    MY_ASSERT(stats.tot_avail < ref_stats.tot_avail);
+    LOG("attempt " << attempt << " : " << print_stats(stats));
+    MY_ASSERT(stats.tot_len_kb > ref_stats.tot_len_kb);
+    MY_ASSERT(stats.tot_avail_kb < ref_stats.tot_avail_kb);
 
-    vector<decimal_t> result(input_len);
+    vector<decimal_t> result(buffer_len);
     std::copy(buckets.global_begin(), buckets.global_end(), result.begin());
     MY_ASSERT(std::is_sorted(buckets.global_begin(), buckets.global_end(), comp_decimal));
 
-    //LOG(result.size() << " / " << extra_input.size());
+    //LOG(stats.item_count << " / " << extra_input.size());
     uint32_t hit_count = 0;
     auto ref_it = extra_input.begin();
     for(auto dec : result) {
@@ -590,7 +674,7 @@ void test_bucket_add_and_rebalance_fuzzy() {
         ++hit_count;
       }
     }
-    //LOG(hit_count << " / " << extra_input.size());
+    LOG(hit_count << " / " << extra_input.size());
     MY_ASSERT(hit_count == extra_input.size());
   }
 }
@@ -637,6 +721,7 @@ void test_validation_all() {
   test_codec_fuzzy();
   test_bucket_shift_bits();
   test_bucket_fail_shift_bits();
+  test_bucket_overflow_shift_bits();
   test_add_number();
   test_add_number_fuzzy();
   test_bucket_both_extend_fail();
