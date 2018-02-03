@@ -148,7 +148,7 @@ buffer_t sort_one_million_in_one_mb(const std::vector<uint32_t>& input) {
   buffer_t buffer = buid_buffer();
   uint32_t progress = 0;
   for(auto i : input) {
-    if(++progress % (input_len/100) == 0) {
+    if(++progress % (input_len/10) == 0) {
       LOG("Adding to buffer : len_kb=" << (buffer.second/1024) << " progress=" << progress);
       //LOG("oracle : " << print_collection(buffer.oracle));
     }

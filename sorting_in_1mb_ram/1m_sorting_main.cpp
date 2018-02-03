@@ -5,7 +5,11 @@
 #include <random>
 
 #define DECLARE_INPUT \
-  vector<uint32_t> input = { 0, 1, 32, 64, 90, 100, 127, 128, 255, 256, 1024, 8291, 8292, 5000, 2097251, 2097252, 2097352, 99999999, rand_msk }
+  vector<uint32_t> input = { 0, 1, 32, 64, 90, 100, 127, 128, \
+                            comp_max_1-1, comp_max_1, comp_max_1+1, \
+                            comp_max_2-1, comp_max_2, comp_max_2+1, \
+                            comp_max_3-1, comp_max_3, comp_max_3+1, \
+                            max_v_mask-1, max_v_mask }
 
 using namespace std;
 
@@ -60,28 +64,15 @@ void fill_bucket_raw(Buckets& buckets, uint32_t target, const vector<uint8_t>& r
   buckets.update(target, start_it);
 }
 
-vector<decimal_t> generate_rand_decimal_input(uint32_t len, uint32_t max_value=max_rand) {
-  vector<decimal_t> result;
-  result.resize(len);
-  random_device rd;
-  mt19937 gen(rd());
-  uniform_int_distribution<> dist(0, max_value);
-
-  for(auto& i : result) {
-    auto source = dist(gen);
-    i.first = source % rand_msk;
-    i.second = source / rand_msk;
-  }
-  return result;
-}
-
-vector<uint32_t> generate_rand_uint_input(uint32_t len, uint32_t max_item_val) {
+vector<uint32_t> generate_rand_uint_input(uint32_t len, uint32_t max_item_val=max_v_mask) {
   random_device rd;
   mt19937 gen(rd());
   uniform_int_distribution<> dist(0, max_item_val);
 
-  if(len == 0)
-    len = dist(gen) % 240;
+  if(len == 0) {
+    uint32_t max_to_fit = buffer_len / (bucket_len * (compress_len(max_item_val)/8)) - 1;
+    len = dist(gen) % max_to_fit;
+  }
   vector<uint32_t> input;
   input.reserve(len);
   for(uint32_t i=0; i<len; ++i)
@@ -124,7 +115,7 @@ void test_compression() {
 
 void test_compression_exhaustive() {
   TEST_HEADER();
-  for(uint32_t u=0; u<rand_msk; ++u) {
+  for(uint32_t u=0; u<max_v_mask; ++u) {
     auto comp = compress(u);
     auto decomp = decompress(comp);
     if (u != decomp) {
@@ -162,7 +153,7 @@ void test_bucket_algorithm() {
   TEST_HEADER();
   DECLARE_INPUT;
   auto buckets = build_and_fill_first_bucket();
-  vector<uint32_t> to_find = {100, 0, 1, rand_msk};
+  vector<uint32_t> to_find = {100, 0, 1, max_v_mask};
   vector<uint32_t> to_miss = {333, 666, 289347};
 
   for(uint32_t u : to_find) {
@@ -188,20 +179,20 @@ void test_bucket_algorithm() {
 void test_codec_fuzzy() {
   TEST_HEADER();
   uint32_t idx = 0;
-  auto decimals = generate_rand_decimal_input(10 * input_len);
+  auto decimals = generate_rand_uint_input(10 * input_len);
   vector<uint8_t> buffer;
   buffer.resize(decimals.size() * comp_len_4/8);
   BucketIt write_it {buffer.data(), buffer.data() + buffer.size(), 0};
   BucketIt start_it {buffer.data(), buffer.data() + buffer.size(), 0};
 
   for(auto u : decimals)
-    write_it.write_and_advance(u.first);
+    write_it.write_and_advance(u);
 
   ItContainer<BucketIt> container {start_it, write_it};
   for(auto value : container) { 
-    if(decimals[idx].first != value) {
-      LOG(decimals[idx].first << " != " << value);
-      MY_ASSERT(decimals[idx].first == value);
+    if(decimals[idx] != value) {
+      LOG(decimals[idx] << " != " << value);
+      MY_ASSERT(decimals[idx] == value);
     }
     idx += 1;
   }
@@ -305,21 +296,21 @@ void test_write_overflow() {
   TEST_HEADER();
   array<uint8_t, 1024> data = {{0}};
   uint8_t* start=data.data();
-  uint32_t result1 = write_compressed(rand_msk, start, 0, start+2);
-  uint32_t result2 = write_compressed(rand_msk, start, 2, start+4);
+  uint32_t result1 = write_compressed(max_v_mask, start, 0, start+2);
+  uint32_t result2 = write_compressed(max_v_mask, start, 2, start+4);
   MY_ASSERT(overflow_count(result1));
   MY_ASSERT(overflow_count(result2));
 }
 
 void test_generate_rand_decimal_input() {
   TEST_HEADER();
-  auto input = generate_rand_decimal_input(100);
+  auto input = generate_rand_uint_input(100);
   LOG(print_collection(input));
 }
 
 void test_decimal_to_bucket_int() {
   TEST_HEADER();
-  auto input = generate_rand_decimal_input(100);
+  auto input = generate_rand_uint_input(100);
   for(auto d : input) {
     auto result = decimal_to_bucket_int(d);
     LOG(my_format(d) << " " << my_format(result));
@@ -508,19 +499,17 @@ void test_add_number() {
   auto buckets = build_buckets();
 
   for(auto n : input) {
-    decimal_t decimal = {n, 0};
-    auto result = buckets.add_number(decimal);
+    auto result = buckets.add_number(n);
     MY_ASSERT(!overflow_count(result));
   }
   compare_deltas_to_ref(input, buckets.at(0));
 
   buckets.clear();
-  decimal_t decimal = {0, 0};
   for(uint32_t i=0; i < 8*(buckets.ends[0] - buckets.starts[0]) / compress_len(0); ++i) {
-    auto result = buckets.add_number(decimal);
+    auto result = buckets.add_number(0);
     MY_ASSERT(!overflow_count(result));
   }
-  auto result = buckets.add_number(decimal);
+  auto result = buckets.add_number(0);
   MY_ASSERT(overflow_count(result));
 }
 
@@ -528,12 +517,12 @@ void test_add_number_fuzzy() {
   TEST_HEADER();
   auto buckets = build_buckets();
   for(uint32_t attempt = 0;
-      attempt < 10000;
+      attempt < 2000;
       ++attempt, buckets.clear()) {
     auto input = generate_rand_uint_input(0, bucket_max_value);
 
     for(auto value : input) {
-      auto result = buckets.add_number(decimal_t{value, 0});
+      auto result = buckets.add_number(value);
       MY_ASSERT(!overflow_count(result));
     }
 
@@ -591,9 +580,9 @@ void test_bucket_both_extend_fail() {
 void test_bucket_add_and_rebalance() {
   TEST_HEADER();
   auto buckets = build_buckets();
-  decimal_t decimal = {1, 0};
+  decimal_t decimal = 1;
   uint32_t max_cap = buckets.select_bigger([&](uint32_t i) { return buckets.capacity(i); }).second;
-  uint32_t to_add_count = 3 * max_cap / compress_len(1) + 1;
+  uint32_t to_add_count = 3 * max_cap / compress_len(decimal) + 1;
   
   for(uint32_t i=0; i<to_add_count; ++i) {
     uint32_t ok = add_rebalance_if_needed(buckets, decimal);
@@ -603,7 +592,7 @@ void test_bucket_add_and_rebalance() {
   //LOG("### to_add_count=" << to_add_count << " max_cap=" << max_cap << " big_bucket=" << my_format(big_bucket));
 
   buckets.clear();
-  decimal.second = decimal_places - 1;
+  decimal += bucket_val_mask * (bucket_len - 1);
 
   for(uint32_t i=0; i<to_add_count; ++i) {
     uint32_t ok = add_rebalance_if_needed(buckets, decimal);
@@ -613,7 +602,7 @@ void test_bucket_add_and_rebalance() {
   //LOG("### to_add_count=" << to_add_count << " max_cap=" << max_cap << " big_bucket=" << my_format(big_bucket));
 
   buckets.clear();
-  decimal = make_pair(rand_msk - 1, decimal_places - 1);
+  decimal = max_v_mask - 1;
   to_add_count = 2 * max_cap / compress_len(1) - 1;
 
   for(uint32_t i=0; i<to_add_count; ++i) {
@@ -628,8 +617,8 @@ void test_bucket_add_and_rebalance_fuzzy() {
   TEST_HEADER();
   const uint32_t fill_val = 0;
   const double ratio = 1.0 * comp_len_1 / comp_len_3;
-  const double fill_frac = 0.75;
-  const double balance_frac = ((1-fill_frac) * ratio) * 1.31; // tweaked to almost overflow buckets
+  const double fill_frac = 0.85;
+  const double balance_frac = ((1-fill_frac) * ratio) * 2.37; // tweaked to almost overflow buckets
 
   auto buckets = build_buckets();
   auto ref_buckets = build_buckets();
@@ -643,16 +632,16 @@ void test_bucket_add_and_rebalance_fuzzy() {
     buckets.clear();
     buckets.buffer = ref_buckets.buffer;
     buckets.lens = ref_buckets.lens;
-    auto extra_input = generate_rand_decimal_input(balance_frac * ref_cap * bucket_len);
-    extra_input.erase(std::remove_if(extra_input.begin(), extra_input.end(), 
-      [](decimal_t d) { return d.first % bucket_val_mask == 0; }));
+    auto extra_input = generate_rand_uint_input(balance_frac * ref_cap * bucket_len);
+    auto remove_from = std::remove_if(extra_input.begin(), extra_input.end(),
+       [](decimal_t d) { return !(d % bucket_val_mask); });
+    extra_input.erase(remove_from, extra_input.end());
 
     for(auto decimal : extra_input) {
       uint32_t ok = add_rebalance_if_needed(buckets, decimal);
       MY_ASSERT(!overflow_count(ok));
     }
 
-    std::sort(extra_input.begin(), extra_input.end(), comp_decimal);
     auto stats = buckets.calculate_stats();
     LOG("attempt " << attempt << " : " << print_stats(stats));
     MY_ASSERT(stats.tot_len_kb > ref_stats.tot_len_kb);
@@ -660,13 +649,14 @@ void test_bucket_add_and_rebalance_fuzzy() {
 
     vector<decimal_t> result(buffer_len);
     std::copy(buckets.global_begin(), buckets.global_end(), result.begin());
-    MY_ASSERT(std::is_sorted(buckets.global_begin(), buckets.global_end(), comp_decimal));
+    MY_ASSERT(std::is_sorted(buckets.global_begin(), buckets.global_end()));
 
     //LOG(stats.item_count << " / " << extra_input.size());
+    std::sort(extra_input.begin(), extra_input.end());
     uint32_t hit_count = 0;
     auto ref_it = extra_input.begin();
     for(auto dec : result) {
-      ref_it = lower_bound(ref_it, extra_input.end(), dec, comp_decimal);
+      ref_it = lower_bound(ref_it, extra_input.end(), dec);
       MY_ASSERT(ref_it != extra_input.end());
       if(dec == *ref_it) {
         //if (hit_count % 1000 == 0)
@@ -682,12 +672,12 @@ void test_bucket_add_and_rebalance_fuzzy() {
 void sort_one_million_in_one_mb() {
   uint32_t error_count = 0;
   for(uint32_t attempt = 0; attempt < 1; ++attempt) {
-    auto input = generate_rand_decimal_input(input_len);
+    auto input = generate_rand_uint_input(input_len);
     const auto buckets = order_numbers_into_buckets(input);
     LOG("buckets stats = " << print_stats(buckets.calculate_stats()));
     
     auto global_it = buckets.global_begin();
-    std::sort(input.begin(), input.end(), comp_decimal);
+    std::sort(input.begin(), input.end());
 
     for(uint32_t idx=0; idx < input.size(); ++idx, ++global_it) {
       MY_ASSERT(global_it != buckets.global_end());

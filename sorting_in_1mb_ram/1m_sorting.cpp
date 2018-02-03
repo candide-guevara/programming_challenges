@@ -150,7 +150,6 @@ uint32_t Buckets::byte_len(uint32_t target) const {
 }
 
 StatBuckets Buckets::calculate_stats() const {
-  const uint32_t window = 10;
   uint32_t item_count = 0;
   auto tot_avail_kb = Buckets::accumulate([this](uint32_t i) { return available(i); }, 0.0) / 8192;
   auto avg_cap_byte = Buckets::accumulate([this](uint32_t i) { return capacity(i); }, 0.0) / (8*bucket_len);
@@ -166,12 +165,12 @@ StatBuckets Buckets::calculate_stats() const {
     for(auto val : at(i)) {
       item_count += 1;
       ++len_histo[compress_len(val)];
-      if(val <= 2 * bias)
-        ++val_histo[val/window];
-      else if(val <= comp_max_2)
-        ++val_histo[10*bias/window + val/10*window];
-      else if(val <= comp_max_3)
-        ++val_histo[1000*bias/window + val/100*window];
+      if(val < comp_max_1)
+        ++val_histo[val];
+      else if(val < comp_max_2)
+        ++val_histo[comp_max_1 + val/comp_max_1];
+      else
+        ++val_histo[comp_max_2 + val/comp_max_2];
     }
   }
   
@@ -214,14 +213,14 @@ uint32_t Buckets::r_extend(uint32_t target, uint32_t amount) {
 }
 
 uint32_t Buckets::r_extend(uint32_t target, uint32_t amount, uint32_t prev_idx) {
-  MY_ASSERT(amount);
-  MY_ASSERT(prev_idx == prev_contiguous(target));
+  MY_ASSERT(amount && prev_idx == prev_contiguous(target));
   if (prev_idx == bucket_len)
     return make_ov_error(amount);
 
   uint32_t avail = available(prev_idx) / 8;
-  if(avail < amount)
-    return make_ov_error(amount - avail);
+  uint32_t cap   = capacity(prev_idx) / 8;
+  if(avail < amount || cap == amount)
+    return make_ov_error(cap == avail ? amount : amount - avail);
 
   uint8_t* new_start = starts[target] - amount;
   uint8_t* end_copy = starts[target] + byte_len(target);
@@ -238,14 +237,14 @@ uint32_t Buckets::extend(uint32_t target, uint32_t amount) {
 }
 
 uint32_t Buckets::extend(uint32_t target, uint32_t amount, uint32_t next_idx) {
-  MY_ASSERT(amount);
-  MY_ASSERT(next_idx == next_contiguous(target));
+  MY_ASSERT(amount && next_idx == next_contiguous(target));
   if (next_idx == bucket_len)
     return make_ov_error(amount);
 
   uint32_t avail = available(next_idx) / 8;
-  if(avail < amount)
-    return make_ov_error(amount - avail);
+  uint32_t cap   = capacity(next_idx) / 8;
+  if(avail < amount || cap == amount)
+    return make_ov_error(cap == avail ? amount : amount - avail);
 
   uint8_t* new_start = starts[next_idx] + amount;
   uint8_t* end_copy = starts[next_idx] + byte_len(next_idx);
@@ -477,7 +476,7 @@ GlobalIt& GlobalIt::operator++() {
   MY_ASSERT(cur_bucket == bucket_len || internal_it != buckets->end(cur_bucket));
 
   if(cur_bucket != bucket_len) 
-    value.first += *internal_it;
+    value += *internal_it;
   return *this;
 }
 
@@ -518,26 +517,13 @@ uint32_t overflow_count(uint32_t ov_error) {
 
 bucket_int_t decimal_to_bucket_int(decimal_t decimal) {
   bucket_int_t bucket_int;
-  bucket_int.first = (decimal.second * bucket_family_len) + (decimal.first / bucket_val_mask);
-  bucket_int.second = decimal.first % bucket_val_mask;
-
-  MY_ASSERT(bucket_int.first < bucket_len);
+  bucket_int.first  = decimal / bucket_val_mask;
+  bucket_int.second = decimal % bucket_val_mask;
   return bucket_int;
 }
 
 decimal_t bucket_int_to_decimal(bucket_int_t bucket_int) {
-  decimal_t decimal;
-  decimal.first = bucket_int.second + (bucket_int.first % bucket_family_len) * bucket_val_mask;
-  decimal.second = bucket_int.first / bucket_family_len;
-
-  MY_ASSERT(decimal.first < rand_msk && decimal.second < decimal_places);
-  return decimal;
-}
-
-bool comp_decimal(decimal_t lhs, decimal_t rhs) {
-  return (lhs.second < rhs.second)
-         || (lhs.second == rhs.second && lhs.first < rhs.first);
-  //return lhs.first * pow(10, -lhs.second) < rhs.first * pow(10, -rhs.second);
+  return bucket_int.first * bucket_val_mask + bucket_int.second;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -598,6 +584,7 @@ uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, u
     return comp_len;
   }
   MY_ASSERT(false);
+  return 0;
 }
 
 comp_int_t compress(uint32_t number) {

@@ -15,9 +15,8 @@
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const static size_t input_len = 1000000;
-const static size_t max_rand  = 899999999;
-const static size_t rand_msk  = 100000000;
+const static size_t input_len  = 1000000;
+const static size_t max_v_mask  = 100000000;
 const static size_t comp_len_1 = 8;
 const static size_t comp_len_2 = 16;
 const static size_t comp_len_3 = 32;
@@ -26,17 +25,15 @@ const static size_t comp_max_1 = 241;
 const static size_t comp_max_2 = 3568;
 const static size_t comp_max_3 = (1 << 23);
 const static size_t comp_max_4 = (1 << 31);
+const static size_t bucket_len = 500;
 const static size_t safe_bucket_inc = 2 * comp_len_3 / 8;
-const static size_t decimal_places = 9;
-const static size_t bucket_family_len = 10;
-const static size_t bucket_max_value = rand_msk / bucket_family_len - 1;
-const static size_t bucket_val_mask = rand_msk / bucket_family_len;
-const static size_t bucket_len = bucket_family_len * decimal_places;
+const static size_t bucket_val_mask = max_v_mask / bucket_len;
+const static size_t bucket_max_value = bucket_val_mask - 1;
 const static size_t buffer_len = input_len * 1.90;
-const static size_t bias = bucket_val_mask * bucket_len / input_len;
+const static size_t bias = max_v_mask / input_len;
 
 using comp_int_t = std::array<uint8_t, comp_len_4/8>;
-using decimal_t = std::pair<uint32_t, uint32_t>;
+using decimal_t = uint32_t;
 using int_len_t = std::pair<uint32_t, uint32_t>;
 using bucket_int_t = std::pair<uint32_t, uint32_t>;
 using bucket_stat_t = std::pair<uint32_t, double>;
@@ -176,13 +173,12 @@ uint32_t add_rebalance_strategy_4(Buckets& buckets, decimal_t decimal);
 bucket_int_t decimal_to_bucket_int(decimal_t decimal);
 decimal_t bucket_int_to_decimal(bucket_int_t bucket_int);
 int32_t operator-(uint8_t *lhs, const BucketIt& rhs);
-bool comp_decimal(decimal_t lhs, decimal_t rhs);
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<bool invert, class F>
 bucket_stat_t Buckets::select_bigger(F selector) const {
-  bucket_stat_t biggest = {0, invert? rand_msk : 0};
+  bucket_stat_t biggest = {0, selector(0)};
   for(uint32_t i=0; i < bucket_len; ++i) {
     double quant = selector(i); 
     if(invert && quant < biggest.second) 

@@ -13,7 +13,7 @@
 
 const uint8_t max_len = 6;
 const uint32_t input_mask = 100000000;
-const uint32_t input_len = 1000000;
+const uint32_t input_len  = 1000000;
 const uint32_t buffer_len = 1024*1024;
 const uint32_t max_input = input_mask - 1;
 using compress_t = std::array<uint8_t, max_len>;
