@@ -17,23 +17,21 @@
 
 const static size_t input_len  = 1000000;
 const static size_t max_v_mask  = 100000000;
-const static size_t comp_len_1 = 8;
-const static size_t comp_len_2 = 16;
+const static size_t comp_len_1 = 7;
+const static size_t comp_len_2 = 14;
 const static size_t comp_len_3 = 32;
 const static size_t comp_len_4 = 40;
-const static size_t comp_max_1 = 241;
-const static size_t comp_max_2 = 3568;
-const static size_t comp_max_3 = (1 << 23);
-const static size_t comp_max_4 = (1 << 31);
+const static size_t comp_max_1 = 121;
+const static size_t comp_max_2 = 888;
+const static size_t comp_max_3 = (1 << 24);
+const static size_t comp_max_4 = (1 << 30);
 const static size_t bucket_len = 500;
 const static size_t safe_bucket_inc = 2 * comp_len_3 / 8;
 const static size_t bucket_val_mask = max_v_mask / bucket_len;
 const static size_t bucket_max_value = bucket_val_mask - 1;
-const static size_t buffer_len = input_len * 1.90;
-const static size_t bias = max_v_mask / input_len;
+const static size_t buffer_len = 1024*1024 + 92*1024; //input_len * 1.20;
 
 using comp_int_t = std::array<uint8_t, comp_len_4/8>;
-using decimal_t = uint32_t;
 using int_len_t = std::pair<uint32_t, uint32_t>;
 using bucket_int_t = std::pair<uint32_t, uint32_t>;
 using bucket_stat_t = std::pair<uint32_t, double>;
@@ -61,18 +59,20 @@ struct BucketIt {
   bool operator==(const BucketIt& rhs) const;
   bool operator!=(const BucketIt& rhs) const;
   int32_t operator-(const BucketIt& rhs) const;
+  bool operator<(const BucketIt& rhs) const;
+  bool operator<=(const BucketIt& rhs) const;
 };
 
 struct GlobalIt {
   const Buckets* buckets;
   uint32_t cur_bucket;
   BucketIt internal_it;
-  decimal_t value;
+  uint32_t value;
 
-  using value_type = decimal_t;
+  using value_type = uint32_t;
   using difference_type = int32_t;
-  using pointer = const decimal_t*;
-  using reference = const decimal_t&;
+  using pointer = const uint32_t*;
+  using reference = const uint32_t&;
   using iterator_category = std::forward_iterator_tag;
 
   reference operator*();
@@ -117,7 +117,7 @@ struct Buckets {
   void clear();
   void update(uint32_t idx, BucketIt it);
   uint32_t swap(uint32_t from, uint32_t to);
-  uint32_t add_number(decimal_t decimal);
+  uint32_t add_number(uint32_t number);
   uint32_t shift_bits(uint32_t target, BucketIt start_it, int32_t len);
   uint32_t r_extend(uint32_t target, uint32_t amount);
   uint32_t r_extend(uint32_t target, uint32_t amount, uint32_t prev);
@@ -142,13 +142,13 @@ struct Buckets {
 
   uint32_t _swap(uint32_t from, uint32_t to);
   uint32_t _r_extend(uint32_t target, uint32_t amount);
-	uint32_t _add_number(decimal_t decimal);
+	uint32_t _add_number(uint32_t number);
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Buckets build_buckets();
-std::vector<decimal_t> generate_input(uint32_t len, uint32_t max_value);
+std::vector<uint32_t> generate_input(uint32_t len, uint32_t max_value);
 
 uint32_t make_ov_error(uint32_t ov_count);
 uint32_t overflow_count(uint32_t ov_error);
@@ -156,22 +156,22 @@ uint32_t overflow_count(uint32_t ov_error);
 uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, uint8_t* end);
 comp_int_t compress(uint32_t number);
 size_t compress_len(uint32_t number);
-size_t compress_len(comp_int_t comp);
+size_t compress_len_by_prefix(uint8_t comp_0);
 int_len_t decompress(uint8_t* start, uint8_t bit_offset);
 uint32_t decompress(comp_int_t comp);
 
-Buckets order_numbers_into_buckets(const std::vector<decimal_t>& input);
-uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal);
+Buckets order_numbers_into_buckets(const std::vector<uint32_t>& input);
+uint32_t add_rebalance_if_needed(Buckets& buckets, uint32_t number);
 
-using strategy_t = uint32_t(*)(Buckets&, decimal_t);
-uint32_t add_rebalance_strategy_0(Buckets& buckets, decimal_t decimal);
-uint32_t add_rebalance_strategy_1(Buckets& buckets, decimal_t decimal);
-uint32_t add_rebalance_strategy_2(Buckets& buckets, decimal_t decimal);
-uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal);
-uint32_t add_rebalance_strategy_4(Buckets& buckets, decimal_t decimal);
+using strategy_t = uint32_t(*)(Buckets&, uint32_t);
+uint32_t add_rebalance_strategy_0(Buckets& buckets, uint32_t number);
+uint32_t add_rebalance_strategy_1(Buckets& buckets, uint32_t number);
+uint32_t add_rebalance_strategy_2(Buckets& buckets, uint32_t number);
+uint32_t add_rebalance_strategy_3(Buckets& buckets, uint32_t number);
+uint32_t add_rebalance_strategy_4(Buckets& buckets, uint32_t number);
 
-bucket_int_t decimal_to_bucket_int(decimal_t decimal);
-decimal_t bucket_int_to_decimal(bucket_int_t bucket_int);
+bucket_int_t uint32_to_bucket_int(uint32_t number);
+uint32_t bucket_int_to_number(bucket_int_t bucket_int);
 int32_t operator-(uint8_t *lhs, const BucketIt& rhs);
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -4,6 +4,7 @@
 
 using namespace std;
 const static size_t safe_buf_len = comp_len_4 / comp_len_1 + 1;
+const static size_t bias = max_v_mask / input_len;
 
 uint32_t Buckets::_r_extend(uint32_t target, uint32_t amount) {
   MY_ASSERT(amount);
@@ -74,8 +75,8 @@ uint32_t Buckets::_swap(uint32_t from, uint32_t to) {
   return 0;
 }
 
-uint32_t Buckets::_add_number(decimal_t decimal) {
-  auto bucket_int = decimal_to_bucket_int(decimal);
+uint32_t Buckets::_add_number(uint32_t number) {
+  auto bucket_int = uint32_to_bucket_int(number);
   auto bucket_end = end(bucket_int.first);
   uint32_t sum = 0;
   auto insert_it = find_if(begin(bucket_int.first), bucket_end,
@@ -117,10 +118,20 @@ uint32_t Buckets::_add_number(decimal_t decimal) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+size_t _compress_len(comp_int_t comp) {
+  if(!(comp[0] & 0x40))
+    return comp_len_1;
+  if(!(comp[1] & 0x40))
+    return comp_len_2;
+  if(!(comp[2] & 0x80))
+    return comp_len_3;
+  return comp_len_4;
+}
+
 uint32_t _write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, uint8_t* end) {
   MY_ASSERT(bit_offset < 8);
   auto comp = compress(number);
-  int32_t extra_len = bit_offset + compress_len(comp) - 8*(end - start);
+  int32_t extra_len = bit_offset + _compress_len(comp) - 8*(end - start);
 
   if(extra_len > 0)
     return make_ov_error(extra_len);
@@ -179,16 +190,6 @@ uint32_t _write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, 
   start[2] = (comp[1] >> (8-bit_offset)) | (comp[2] << bit_offset);
   start[3] = (comp[2] >> (8-bit_offset)) | (comp[3] << bit_offset);
   start[4] = (start[4] & ~((1 << bit_offset) - 1)) | (comp[3] >> (8-bit_offset));
-  return comp_len_4;
-}
-
-size_t _compress_len(comp_int_t comp) {
-  if(!(comp[0] & 0x40))
-    return comp_len_1;
-  if(!(comp[1] & 0x40))
-    return comp_len_2;
-  if(!(comp[2] & 0x80))
-    return comp_len_3;
   return comp_len_4;
 }
 
@@ -370,7 +371,158 @@ uint32_t _unbiased_decompress(comp_int_t comp) {
     return number;
   }
 }
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+size_t _simple_compress_len(uint32_t number) {
+  if(number < comp_max_1)
+    return comp_len_1;
+  if(number < comp_max_2)
+    return comp_len_2;
+  if(number < comp_max_3)
+    return comp_len_3;
+  return comp_len_4;
+}
+
+size_t _simple_compress_len(comp_int_t comp) {
+  if(comp[0] < comp_max_1)
+    return comp_len_1;
+  if(comp[0] < 254)
+    return comp_len_2;
+  if(comp[0] < 255)
+    return comp_len_3;
+  return comp_len_4;
+}
+
+uint32_t _simple_write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, uint8_t* end) {
+  MY_ASSERT(bit_offset < 8);
+  auto comp = compress(number);
+  uint8_t comp_len = _simple_compress_len(comp);
+  int32_t extra_len = bit_offset + comp_len - 8*(end - start);
+  uint8_t mask = (1 << bit_offset) - 1;
+
+  if(extra_len > 0)
+    return make_ov_error(extra_len);
+
+  if(bit_offset == 0 && comp_len == comp_len_1) {
+    start[0] = comp[0];
+    return comp_len;
+  }
+  if(bit_offset != 0 && comp_len == comp_len_1) {
+    start[0] = (comp[0] << bit_offset) | (start[0] & mask);
+    start[1] = (comp[0] << (8-bit_offset)) | (start[1] & ~mask);
+    return comp_len;
+  }
+
+  if(bit_offset == 0 && comp_len == comp_len_2) {
+    start[0] = comp[0];
+    start[1] = comp[1];
+    return comp_len;
+  }
+  if(bit_offset != 0 && comp_len == comp_len_2) {
+    start[0] = (comp[0] << bit_offset)     | (start[0] & mask);
+    start[1] = (comp[1] << bit_offset)     | (comp[0] >> (8-bit_offset));
+    start[2] = (comp[1] << (8-bit_offset)) | (start[2] & ~mask);
+    return comp_len;
+  }
+
+  if(bit_offset == 0) {
+    start[0] = comp[0];
+    start[1] = comp[1];
+    start[2] = comp[2];
+    start[3] = comp[3];
+    if(comp_len == comp_len_3)
+      return comp_len;
+    start[4] = comp[4];
+    return comp_len;
+  }
+  if(bit_offset != 0) {
+    start[0] = (comp[0] << bit_offset)     | (start[0] & mask);
+    start[1] = (comp[1] << bit_offset)     | (comp[0] >> (8-bit_offset));
+    start[2] = (comp[2] << bit_offset)     | (comp[1] >> (8-bit_offset));
+    start[3] = (comp[3] << bit_offset)     | (comp[2] >> (8-bit_offset));
+    if(comp_len == comp_len_3) {
+      start[4] = (comp[3] << (8-bit_offset)) | (start[4] & ~mask);
+      return comp_len;
+    }
+    start[4] = (comp[4] << bit_offset)     | (comp[3] >> (8-bit_offset));
+    start[5] = (comp[4] << (8-bit_offset)) | (start[5] & ~mask);
+    return comp_len;
+  }
+  MY_ASSERT(false);
+  return 0;
+}
+
+comp_int_t _simple_compress(uint32_t number) {
+  MY_ASSERT(number < comp_max_4);
+  comp_int_t comp;
+
+  if(number < comp_max_1) {
+    comp[0] = number;
+  }
+  else if(number < comp_max_2) {
+    comp[0] = (number - comp_max_1 + 1)/0x100 + comp_max_1;
+    comp[1] = (number - comp_max_1 + 1) % 0x100;
+    MY_ASSERT(comp[0] >= comp_max_1);
+  }
+  else if(number < comp_max_3) {
+    comp[0] = 254;
+    comp[1] = number & 0xff;
+    comp[2] = (number >> 8) & 0xff;
+    comp[3] = (number >> 16) & 0xff;
+  }
+  else {
+    comp[0] = 255;
+    comp[1] = number & 0xff;
+    comp[2] = (number >> 8) & 0xff;
+    comp[3] = (number >> 16) & 0xff;
+    comp[4] = (number >> 24) & 0xff;
+  }
+  return comp;
+}
+
+int_len_t _simple_decompress(uint8_t* start, uint8_t bit_offset) {
+  comp_int_t comp;
+
+  comp[0] = (start[0] >> bit_offset);
+  if(bit_offset)
+    comp[0] |= (start[1] << (8-bit_offset));
+  if(comp[0] < comp_max_1)
+    return make_pair(decompress(comp), comp_len_1);
+
+  comp[1] = (start[1] >> bit_offset);
+  if(bit_offset)
+    comp[1] |= (start[2] << (8-bit_offset));
+  if(comp[0] < 254)
+    return make_pair(decompress(comp), comp_len_2);
+
+  comp[2] = (start[2] >> bit_offset);
+  comp[3] = (start[3] >> bit_offset);
+  if(bit_offset) {
+    comp[2] |= (start[3] << (8-bit_offset));
+    comp[3] |= (start[4] << (8-bit_offset));
+  }
+  if(comp[0] < 255)
+    return make_pair(decompress(comp), comp_len_3);
+
+  comp[4] = (start[4] >> bit_offset);
+  if(bit_offset)
+    comp[4] |= (start[5] << (8-bit_offset));
+  return make_pair(decompress(comp), comp_len_4);
+}
+
+uint32_t _simple_decompress(comp_int_t comp) {
+  if(comp[0] < comp_max_1)
+    return comp[0];
+  if(comp[0] < 254)
+    return comp_max_1 - 1 + 0x100*(comp[0] - comp_max_1) + comp[1];
+  if(comp[0] < 255)
+    return comp[1] + 0x100 * comp[2] + 0x10000 * comp[3];
+  return comp[1] + 0x100 * comp[2] + 0x10000 * comp[3] + 0x1000000 * comp[4];
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 /*
 void _test_compress_len() {

@@ -70,6 +70,15 @@ int32_t BucketIt::operator-(const BucketIt& rhs) const {
   return 8 * (start - rhs.start) + (bit_offset - rhs.bit_offset);
 }
 
+bool BucketIt::operator<(const BucketIt& rhs) const {
+  MY_ASSERT(end == rhs.end);
+  return (start < rhs.start) || (start == rhs.start && bit_offset < rhs.bit_offset);
+}
+
+bool BucketIt::operator<=(const BucketIt& rhs) const {
+  return (*this < rhs) || (*this == rhs);
+}
+
 int32_t operator-(uint8_t* lhs, const BucketIt& rhs) {
   return 8 * (lhs - rhs.start) - rhs.bit_offset;
 }
@@ -113,7 +122,7 @@ GlobalIt Buckets::global_begin() const {
     return GlobalIt{this, idx};
 
   auto global_it = GlobalIt{this, idx, begin(idx)};
-  global_it.value = bucket_int_to_decimal(make_pair(idx, *global_it.internal_it));
+  global_it.value = bucket_int_to_number(make_pair(idx, *global_it.internal_it));
   return global_it;
 }
 
@@ -281,7 +290,7 @@ uint32_t Buckets::swap(uint32_t from, uint32_t to) {
 
 uint32_t Buckets::shift_bits(uint32_t target, BucketIt start_it, int32_t extra_len) {
   auto bucket_end = end(target);
-  MY_ASSERT(start_it.start <= ends[target] && start_it.start >= starts[target]);
+  MY_ASSERT(start_it <= bucket_end && start_it.start >= starts[target]);
   int32_t ov_count = extra_len < 0 ? 
     -extra_len - (start_it - begin(target))
     : extra_len - available(target);
@@ -327,8 +336,8 @@ uint32_t Buckets::shift_bits(uint32_t target, BucketIt start_it, int32_t extra_l
   return (extra_len < 0 ? 0 : extra_len);
 }
 
-uint32_t Buckets::add_number(decimal_t decimal) {
-  auto bucket_int = decimal_to_bucket_int(decimal);
+uint32_t Buckets::add_number(uint32_t number) {
+  auto bucket_int = uint32_to_bucket_int(number);
   auto bucket_end = end(bucket_int.first);
   uint32_t sum = 0;
 
@@ -471,7 +480,7 @@ GlobalIt& GlobalIt::operator++() {
   while(internal_it == buckets->end(cur_bucket) 
         && ++cur_bucket < bucket_len) {
     internal_it = buckets->begin(cur_bucket);
-    value = bucket_int_to_decimal(make_pair(cur_bucket, 0));
+    value = bucket_int_to_number(make_pair(cur_bucket, 0));
   }
   MY_ASSERT(cur_bucket == bucket_len || internal_it != buckets->end(cur_bucket));
 
@@ -515,14 +524,14 @@ uint32_t overflow_count(uint32_t ov_error) {
   return (ov_error >> 31) ? -ov_error : 0; 
 }
 
-bucket_int_t decimal_to_bucket_int(decimal_t decimal) {
+bucket_int_t uint32_to_bucket_int(uint32_t number) {
   bucket_int_t bucket_int;
-  bucket_int.first  = decimal / bucket_val_mask;
-  bucket_int.second = decimal % bucket_val_mask;
+  bucket_int.first  = number / bucket_val_mask;
+  bucket_int.second = number % bucket_val_mask;
   return bucket_int;
 }
 
-decimal_t bucket_int_to_decimal(bucket_int_t bucket_int) {
+uint32_t bucket_int_to_number(bucket_int_t bucket_int) {
   return bucket_int.first * bucket_val_mask + bucket_int.second;
 }
 
@@ -530,33 +539,45 @@ decimal_t bucket_int_to_decimal(bucket_int_t bucket_int) {
 
 uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, uint8_t* end) {
   MY_ASSERT(bit_offset < 8);
-  auto comp = compress(number);
-  uint8_t comp_len = compress_len(comp);
-  int32_t extra_len = bit_offset + comp_len - 8*(end - start);
-  uint8_t mask = (1 << bit_offset) - 1;
+  const auto comp = compress(number);
+  const uint8_t comp_len = compress_len_by_prefix(comp[0]);
+  const int32_t extra_len = bit_offset + comp_len - 8*(end - start);
+  const uint8_t mask = (1 << bit_offset) - 1;
 
   if(extra_len > 0)
     return make_ov_error(extra_len);
 
   if(bit_offset == 0 && comp_len == comp_len_1) {
-    start[0] = comp[0];
+    start[0] = comp[0] | (start[0] & 0x80);
     return comp_len;
   }
-  if(bit_offset != 0 && comp_len == comp_len_1) {
+  if(bit_offset == 1 && comp_len == comp_len_1) {
     start[0] = (comp[0] << bit_offset) | (start[0] & mask);
-    start[1] = (comp[0] << (8-bit_offset)) | (start[1] & ~mask);
+    return comp_len;
+  }
+  if(bit_offset > 1 && comp_len == comp_len_1) {
+    uint8_t imask = ~((1 << (bit_offset-1)) - 1);
+    start[0] = (comp[0] << bit_offset) | (start[0] & mask);
+    start[1] = (comp[0] >> (8-bit_offset)) | (start[1] & imask);
     return comp_len;
   }
 
   if(bit_offset == 0 && comp_len == comp_len_2) {
     start[0] = comp[0];
-    start[1] = comp[1];
+    start[1] = comp[1] | (start[1] & 0xc0);
     return comp_len;
   }
-  if(bit_offset != 0 && comp_len == comp_len_2) {
+  if(bit_offset < 3 && comp_len == comp_len_2) {
+    uint8_t scrap = (start[1] & 0x80) << (bit_offset - 1);
+    start[0] = (comp[0] << bit_offset) | (start[0] & mask);
+    start[1] = (comp[1] << bit_offset) | (comp[0] >> (8-bit_offset)) | scrap;
+    return comp_len;
+  }
+  if(bit_offset > 2 && comp_len == comp_len_2) {
+    uint8_t iimask = ~((1 << (bit_offset-2)) - 1);
     start[0] = (comp[0] << bit_offset)     | (start[0] & mask);
     start[1] = (comp[1] << bit_offset)     | (comp[0] >> (8-bit_offset));
-    start[2] = (comp[1] << (8-bit_offset)) | (start[2] & ~mask);
+    start[2] = (comp[1] >> (8-bit_offset)) | (start[2] & iimask);
     return comp_len;
   }
 
@@ -576,11 +597,11 @@ uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, u
     start[2] = (comp[2] << bit_offset)     | (comp[1] >> (8-bit_offset));
     start[3] = (comp[3] << bit_offset)     | (comp[2] >> (8-bit_offset));
     if(comp_len == comp_len_3) {
-      start[4] = (comp[3] << (8-bit_offset)) | (start[4] & ~mask);
+      start[4] = (comp[3] >> (8-bit_offset)) | (start[4] & ~mask);
       return comp_len;
     }
     start[4] = (comp[4] << bit_offset)     | (comp[3] >> (8-bit_offset));
-    start[5] = (comp[4] << (8-bit_offset)) | (start[5] & ~mask);
+    start[5] = (comp[4] >> (8-bit_offset)) | (start[5] & ~mask);
     return comp_len;
   }
   MY_ASSERT(false);
@@ -595,18 +616,18 @@ comp_int_t compress(uint32_t number) {
     comp[0] = number;
   }
   else if(number < comp_max_2) {
-    comp[0] = (number - comp_max_1 + 1)/0x100 + comp_max_1;
-    comp[1] = (number - comp_max_1 + 1) % 0x100;
-    MY_ASSERT(comp[0] >= comp_max_1);
+    uint8_t quot = (number - comp_max_1 + 1) % 0x80;
+    comp[0] = (number - comp_max_1 + 1)/0x80 + comp_max_1 + (quot << 7);
+    comp[1] = (quot >> 1);
   }
   else if(number < comp_max_3) {
-    comp[0] = 254;
+    comp[0] = 0x7f;
     comp[1] = number & 0xff;
     comp[2] = (number >> 8) & 0xff;
     comp[3] = (number >> 16) & 0xff;
   }
   else {
-    comp[0] = 255;
+    comp[0] = 0xff;
     comp[1] = number & 0xff;
     comp[2] = (number >> 8) & 0xff;
     comp[3] = (number >> 16) & 0xff;
@@ -625,12 +646,13 @@ size_t compress_len(uint32_t number) {
   return comp_len_4;
 }
 
-size_t compress_len(comp_int_t comp) {
-  if(comp[0] < comp_max_1)
+size_t compress_len_by_prefix(uint8_t comp_0) {
+  uint8_t prefix = (comp_0 & 0x7f);
+  if(prefix < comp_max_1)
     return comp_len_1;
-  if(comp[0] < 254)
+  if(prefix < 0x7f)
     return comp_len_2;
-  if(comp[0] < 255)
+  if(comp_0 < 0xff)
     return comp_len_3;
   return comp_len_4;
 }
@@ -641,14 +663,16 @@ int_len_t decompress(uint8_t* start, uint8_t bit_offset) {
   comp[0] = (start[0] >> bit_offset);
   if(bit_offset)
     comp[0] |= (start[1] << (8-bit_offset));
-  if(comp[0] < comp_max_1)
-    return make_pair(decompress(comp), comp_len_1);
+
+  uint8_t comp_len = compress_len_by_prefix(comp[0]);
+  if(comp_len == comp_len_1)
+    return make_pair(decompress(comp), comp_len);
 
   comp[1] = (start[1] >> bit_offset);
   if(bit_offset)
     comp[1] |= (start[2] << (8-bit_offset));
-  if(comp[0] < 254)
-    return make_pair(decompress(comp), comp_len_2);
+  if(comp_len == comp_len_2)
+    return make_pair(decompress(comp), comp_len);
 
   comp[2] = (start[2] >> bit_offset);
   comp[3] = (start[3] >> bit_offset);
@@ -656,28 +680,33 @@ int_len_t decompress(uint8_t* start, uint8_t bit_offset) {
     comp[2] |= (start[3] << (8-bit_offset));
     comp[3] |= (start[4] << (8-bit_offset));
   }
-  if(comp[0] < 255)
-    return make_pair(decompress(comp), comp_len_3);
+  if(comp_len == comp_len_3)
+    return make_pair(decompress(comp), comp_len);
 
   comp[4] = (start[4] >> bit_offset);
   if(bit_offset)
     comp[4] |= (start[5] << (8-bit_offset));
-  return make_pair(decompress(comp), comp_len_4);
+  return make_pair(decompress(comp), comp_len);
 }
 
 uint32_t decompress(comp_int_t comp) {
-  if(comp[0] < comp_max_1)
-    return comp[0];
-  if(comp[0] < 254)
-    return comp_max_1 - 1 + 0x100*(comp[0] - comp_max_1) + comp[1];
-  if(comp[0] < 255)
+  uint8_t comp_len = compress_len_by_prefix(comp[0]);
+
+  if(comp_len == comp_len_1)
+    return comp[0] & 0x7f;
+  if(comp_len == comp_len_2) {
+    uint8_t a1 = comp[0] & 0x7f;
+    uint8_t a0 = ((comp[0] >> 7) | (comp[1] << 1)) & 0x7f;
+    return comp_max_1 - 1 + 0x80*(a1 - comp_max_1) + a0;
+  }
+  if(comp_len == comp_len_3)
     return comp[1] + 0x100 * comp[2] + 0x10000 * comp[3];
   return comp[1] + 0x100 * comp[2] + 0x10000 * comp[3] + 0x1000000 * comp[4];
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal) {
+uint32_t add_rebalance_if_needed(Buckets& buckets, uint32_t number) {
   const static strategy_t add_strats[] = {
     add_rebalance_strategy_0,
     add_rebalance_strategy_1,
@@ -687,7 +716,7 @@ uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal) {
   uint32_t ok = make_ov_error(1);
 
   for(auto strat : add_strats) {
-    ok = strat(buckets, decimal);
+    ok = strat(buckets, number);
     if(!overflow_count(ok)) break;
   }
   if(overflow_count(ok)) {
@@ -695,42 +724,42 @@ uint32_t add_rebalance_if_needed(Buckets& buckets, decimal_t decimal) {
     buckets.rebalance(safe_bucket_inc);
     STRAT_LOG(5, "after balance : stats=" << print_stats(buckets.calculate_stats()));
 
-    ok = add_rebalance_strategy_0(buckets, decimal);
+    ok = add_rebalance_strategy_0(buckets, number);
     if(overflow_count(ok)) 
-      ok = add_rebalance_strategy_4(buckets, decimal);
+      ok = add_rebalance_strategy_4(buckets, number);
   }
   return ok;
 }
 
 // strategy 0 : just try to add
-uint32_t add_rebalance_strategy_0(Buckets& buckets, decimal_t decimal) {
-  uint32_t ok = buckets.add_number(decimal);
-  //STRAT_LOG(0, "decimal=" << my_format(decimal) << " ov_count=" << ok);
+uint32_t add_rebalance_strategy_0(Buckets& buckets, uint32_t number) {
+  uint32_t ok = buckets.add_number(number);
+  //STRAT_LOG(0, "number=" << my_format(number) << " ov_count=" << ok);
   return ok;
 }
 
 // strategy 1 : extend (in both directions) by the preferred length to make space
-uint32_t add_rebalance_strategy_1(Buckets& buckets, decimal_t decimal) {
-  auto bucket_int = decimal_to_bucket_int(decimal);
+uint32_t add_rebalance_strategy_1(Buckets& buckets, uint32_t number) {
+  auto bucket_int = uint32_to_bucket_int(number);
 
   uint32_t ok = buckets.r_extend(bucket_int.first, safe_bucket_inc);
-  STRAT_LOG(1, "decimal=" << my_format(decimal) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int) << endl
+  STRAT_LOG(1, "number=" << my_format(number) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int) << endl
     << " stats=" << my_format(buckets, bucket_int.first) << " cont_stats=" << my_format(buckets, buckets.prev_contiguous(bucket_int.first)));
   if(overflow_count(ok)) {
     ok = buckets.extend(bucket_int.first, safe_bucket_inc);
-    STRAT_LOG(1, "decimal=" << my_format(decimal) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int) << endl
+    STRAT_LOG(1, "number=" << my_format(number) << " ov_count=" << ok << " bucket_int=" << my_format(bucket_int) << endl
       << " stats=" << my_format(buckets, bucket_int.first) << " cont_stats=" << my_format(buckets, buckets.next_contiguous(bucket_int.first)));
   }
   if(!overflow_count(ok)) {
-    ok = buckets.add_number(decimal);
+    ok = buckets.add_number(number);
     MY_ASSERT(!overflow_count(ok));
   }
   return ok;
 }
 
 // strategy 2 : swap target bucket with the one with more space
-uint32_t add_rebalance_strategy_2(Buckets& buckets, decimal_t decimal) {
-  auto bucket_int = decimal_to_bucket_int(decimal);
+uint32_t add_rebalance_strategy_2(Buckets& buckets, uint32_t number) {
+  auto bucket_int = uint32_to_bucket_int(number);
   uint32_t ok = 0;
   uint32_t target_len = buckets.lens[bucket_int.first] + 8*safe_bucket_inc;
   uint32_t target_cap = buckets.capacity(bucket_int.first);
@@ -743,22 +772,22 @@ uint32_t add_rebalance_strategy_2(Buckets& buckets, decimal_t decimal) {
   else {
     ok = buckets.swap(swap_idx, bucket_int.first);
     MY_ASSERT(!overflow_count(ok));
-    ok = buckets.add_number(decimal);
+    ok = buckets.add_number(number);
     MY_ASSERT(!overflow_count(ok));
   }
-  STRAT_LOG(2, "decimal=" << my_format(decimal) << " ov_count=" << ok
+  STRAT_LOG(2, "number=" << my_format(number) << " ov_count=" << ok
       << " bucket_int=" << my_format(bucket_int) << " swap_idx=" << swap_idx << endl
       << " stats=" << my_format(buckets, bucket_int.first) << " swap_stats=" << my_format(buckets, swap_idx));
   return ok;
 }
 
 // strategy 3 : swap any contiguous bucket with one with more space and extend
-uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal) {
+uint32_t add_rebalance_strategy_3(Buckets& buckets, uint32_t number) {
   using extend_t = function<uint32_t(uint32_t, uint32_t, uint32_t)>;
   uint32_t ok = make_ov_error(1);
-  auto bucket_int = decimal_to_bucket_int(decimal);
+  auto bucket_int = uint32_to_bucket_int(number);
   
-  auto side_strat = [&buckets, &decimal, &bucket_int, &ok] (uint32_t cont_idx, extend_t func) {
+  auto side_strat = [&buckets, &number, &bucket_int, &ok] (uint32_t cont_idx, extend_t func) {
     uint32_t target_len = buckets.lens[cont_idx] - 8*safe_bucket_inc;
     uint32_t swap_idx = buckets.select_first([&](uint32_t i) { 
       return i != cont_idx && buckets.lens[i] <= target_len && buckets.lens[cont_idx] <= buckets.capacity(i);
@@ -771,10 +800,10 @@ uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal) {
       MY_ASSERT(!overflow_count(ok));
       ok = func(bucket_int.first, safe_bucket_inc, swap_idx);
       MY_ASSERT(!overflow_count(ok));
-      ok = buckets.add_number(decimal);
+      ok = buckets.add_number(number);
       MY_ASSERT(!overflow_count(ok));
     }
-    STRAT_LOG(3, "decimal=" << my_format(decimal) << " ov_count=" << ok
+    STRAT_LOG(3, "number=" << my_format(number) << " ov_count=" << ok
         << " bucket_int=" << my_format(bucket_int) << " cont_idx=" << cont_idx << " swap_idx=" << swap_idx << endl
         << " stats=" << my_format(buckets, bucket_int.first) << " swap_stats=" << my_format(buckets, swap_idx));
   };
@@ -791,23 +820,23 @@ uint32_t add_rebalance_strategy_3(Buckets& buckets, decimal_t decimal) {
 }
 
 // strategy 4 : steal 1 byte from all possible buckets until there is enough space
-uint32_t add_rebalance_strategy_4(Buckets& buckets, decimal_t decimal) {
-  auto bucket_int = decimal_to_bucket_int(decimal);
+uint32_t add_rebalance_strategy_4(Buckets& buckets, uint32_t number) {
+  auto bucket_int = uint32_to_bucket_int(number);
   buckets.steal_expand(bucket_int.first, safe_bucket_inc);
-  uint32_t ok = buckets.add_number(decimal);
-  STRAT_LOG(4, "decimal=" << my_format(decimal) << " ov_count=" << ok
+  uint32_t ok = buckets.add_number(number);
+  STRAT_LOG(4, "number=" << my_format(number) << " ov_count=" << ok
       << " bucket_int=" << my_format(bucket_int) << endl
       << " stats=" << my_format(buckets, bucket_int.first));
   return ok;
 }
 
-Buckets order_numbers_into_buckets(const vector<decimal_t>& input) {
+Buckets order_numbers_into_buckets(const vector<uint32_t>& input) {
   Buckets buckets = build_buckets();
   uint32_t count = 0;
-  for(auto decimal : input) {
-    uint32_t ok = add_rebalance_if_needed(buckets, decimal);
+  for(auto number : input) {
+    uint32_t ok = add_rebalance_if_needed(buckets, number);
     if(overflow_count(ok)) {
-      LOG("failed to add : " << my_format(decimal));
+      LOG("failed to add : " << my_format(number));
       LOG("stats : " << print_stats(buckets.calculate_stats()));
       LOG("raw : " << my_format(buckets));
       assert(false);
