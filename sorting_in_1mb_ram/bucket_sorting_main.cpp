@@ -1,5 +1,5 @@
-#include "1m_sorting.hpp"
-#include "1m_sorting_print.hpp"
+#include "bucket_sorting.hpp"
+#include "bucket_sorting_print.hpp"
 #include <algorithm>
 #include <functional>
 #include <random>
