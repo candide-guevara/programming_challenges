@@ -355,7 +355,7 @@ uint32_t Buckets::add_number(uint32_t number) {
     uint32_t delta = bucket_int.second - (sum - int_len.first);
     uint32_t next = sum - bucket_int.second; 
     int32_t extra_len = compress_len(delta) + compress_len(next) - int_len.second;
-    MY_ASSERT(delta < sum && next <= sum && extra_len <= (int32_t)(2*comp_len_4));
+    MY_ASSERT(sum < bucket_val_mask && delta < sum && next <= sum && extra_len <= (int32_t)(2*comp_len_4));
 
     uint32_t ok = shift_bits(bucket_int.first, start_it, extra_len);
     if (!overflow_count(ok)) {
@@ -562,19 +562,15 @@ uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, u
     return comp_len;
   }
 
-  if(bit_offset == 0 && comp_len == comp_len_2) {
-    start[0] = comp[0];
-    start[1] = comp[1] | (start[1] & 0xc0);
-    return comp_len;
-  }
-  if(bit_offset < 3 && comp_len == comp_len_2) {
-    uint8_t scrap = (start[1] & 0x80) << (bit_offset - 1);
+  if(bit_offset < 4 && comp_len == comp_len_2) {
+    uint8_t smask = ((1 << (3-bit_offset)) - 1) << (5+bit_offset);
     start[0] = (comp[0] << bit_offset) | (start[0] & mask);
-    start[1] = (comp[1] << bit_offset) | (comp[0] >> (8-bit_offset)) | scrap;
+    start[1] = (comp[1] << bit_offset) | (comp[0] >> (8-bit_offset)) | (start[1] & smask);
+    MY_ASSERT((comp[1] & 0xe0) == 0);
     return comp_len;
   }
-  if(bit_offset > 2 && comp_len == comp_len_2) {
-    uint8_t iimask = ~((1 << (bit_offset-2)) - 1);
+  if(bit_offset > 3 && comp_len == comp_len_2) {
+    uint8_t iimask = ~((1 << (bit_offset-3)) - 1);
     start[0] = (comp[0] << bit_offset)     | (start[0] & mask);
     start[1] = (comp[1] << bit_offset)     | (comp[0] >> (8-bit_offset));
     start[2] = (comp[1] >> (8-bit_offset)) | (start[2] & iimask);
@@ -616,8 +612,8 @@ comp_int_t compress(uint32_t number) {
     comp[0] = number;
   }
   else if(number < comp_max_2) {
-    uint8_t quot = (number - comp_max_1 + 1) % 0x80;
-    comp[0] = (number - comp_max_1 + 1)/0x80 + comp_max_1 + (quot << 7);
+    uint8_t quot = (number - comp_max_1 + 1) % 0x40;
+    comp[0] = (number - comp_max_1 + 1)/0x40 + comp_max_1 + (quot << 7);
     comp[1] = (quot >> 1);
   }
   else if(number < comp_max_3) {
@@ -696,8 +692,8 @@ uint32_t decompress(comp_int_t comp) {
     return comp[0] & 0x7f;
   if(comp_len == comp_len_2) {
     uint8_t a1 = comp[0] & 0x7f;
-    uint8_t a0 = ((comp[0] >> 7) | (comp[1] << 1)) & 0x7f;
-    return comp_max_1 - 1 + 0x80*(a1 - comp_max_1) + a0;
+    uint8_t a0 = ((comp[0] >> 7) | (comp[1] << 1)) & 0x3f;
+    return comp_max_1 - 1 + 0x40*(a1 - comp_max_1) + a0;
   }
   if(comp_len == comp_len_3)
     return comp[1] + 0x100 * comp[2] + 0x10000 * comp[3];

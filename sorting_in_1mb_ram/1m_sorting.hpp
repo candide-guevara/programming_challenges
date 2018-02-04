@@ -16,20 +16,20 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const static size_t input_len  = 1000000;
-const static size_t max_v_mask  = 100000000;
+const static size_t max_v_mask = 100000000;
 const static size_t comp_len_1 = 7;
-const static size_t comp_len_2 = 14;
+const static size_t comp_len_2 = 13;
 const static size_t comp_len_3 = 32;
 const static size_t comp_len_4 = 40;
-const static size_t comp_max_1 = 121;
-const static size_t comp_max_2 = 888;
+const static size_t comp_max_1 = 119;
+const static size_t comp_max_2 = 630;
 const static size_t comp_max_3 = (1 << 24);
 const static size_t comp_max_4 = (1 << 30);
-const static size_t bucket_len = 500;
+const static size_t bucket_len = 100;
 const static size_t safe_bucket_inc = 2 * comp_len_3 / 8;
 const static size_t bucket_val_mask = max_v_mask / bucket_len;
 const static size_t bucket_max_value = bucket_val_mask - 1;
-const static size_t buffer_len = 1024*1024 + 92*1024; //input_len * 1.20;
+const static size_t buffer_len = (64 + 1024) * 1024; //input_len * 1.20;
 
 using comp_int_t = std::array<uint8_t, comp_len_4/8>;
 using int_len_t = std::pair<uint32_t, uint32_t>;

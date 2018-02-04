@@ -185,32 +185,36 @@ void test_bucket_algorithm() {
 
 void test_codec_fuzzy() {
   TEST_HEADER();
-  uint32_t idx = 0;
-  auto numbers = generate_rand_uint_input(input_len, comp_max_1-1);
-  auto number2 = generate_rand_uint_input(input_len, comp_max_2);
-  auto number3 = generate_rand_uint_input(input_len, comp_max_3);
-  auto number4 = generate_rand_uint_input(input_len);
-  numbers.insert(numbers.end(), number2.begin(), number2.end());
-  numbers.insert(numbers.end(), number3.begin(), number3.end());
-  numbers.insert(numbers.end(), number4.begin(), number4.end());
-  std::random_shuffle(numbers.begin(), numbers.end());
-
   vector<uint8_t> buffer;
-  buffer.resize(numbers.size() * comp_len_4/8);
-  BucketIt write_it {buffer.data(), buffer.data() + buffer.size(), 0};
-  BucketIt start_it {buffer.data(), buffer.data() + buffer.size(), 0};
+  buffer.resize(4*input_len * comp_len_4/8);
 
-  for(auto u : numbers)
-    write_it.write_and_advance(u);
+  for(uint32_t attempt = 0; attempt<20; ++attempt) {
+    uint32_t idx = 0;
+    auto numbers = generate_rand_uint_input(input_len, comp_max_1-1);
+    auto number2 = generate_rand_uint_input(input_len, comp_max_2);
+    auto number3 = generate_rand_uint_input(input_len, comp_max_3);
+    auto number4 = generate_rand_uint_input(input_len);
+    numbers.insert(numbers.end(), number2.begin(), number2.end());
+    numbers.insert(numbers.end(), number3.begin(), number3.end());
+    numbers.insert(numbers.end(), number4.begin(), number4.end());
+    std::random_shuffle(numbers.begin(), numbers.end());
 
-  ItContainer<BucketIt> container {start_it, write_it};
-  for(auto value : container) { 
-    if(numbers[idx] != value) {
-      LOG("at " << idx << " : " << numbers[idx] << " != " << value);
-      MY_ASSERT(numbers[idx] == value);
+    BucketIt start_it {buffer.data(), buffer.data() + buffer.size(), 0};
+    BucketIt write_it = start_it;
+    MY_ASSERT(buffer.size() > numbers.size());
+
+    for(auto u : numbers)
+      write_it.write_and_advance(u);
+
+    ItContainer<BucketIt> container {start_it, write_it};
+    for(auto value : container) { 
+      if(numbers[idx] != value) {
+        LOG("at " << idx << " : " << numbers[idx] << " != " << value);
+        MY_ASSERT(numbers[idx] == value);
+      }
+      idx += 1;
     }
-    idx += 1;
-  }
+  } // attempts
 }
 
 void test_bucket_swap_same_len() {
@@ -636,7 +640,7 @@ void test_bucket_add_and_rebalance_fuzzy() {
   const uint32_t fill_val = 0;
   const double ratio = 1.0 * comp_len_1 / comp_len_3;
   const double fill_frac = 0.75;
-  const double balance_frac = ((1-fill_frac) * ratio) * 1.67; // tweaked to almost overflow buckets
+  const double balance_frac = ((1-fill_frac) * ratio) * 1.45; // tweaked to almost overflow buckets
 
   auto buckets = build_buckets();
   auto ref_buckets = build_buckets();
