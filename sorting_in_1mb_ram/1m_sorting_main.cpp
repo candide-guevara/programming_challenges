@@ -617,8 +617,8 @@ void test_bucket_add_and_rebalance_fuzzy() {
   TEST_HEADER();
   const uint32_t fill_val = 0;
   const double ratio = 1.0 * comp_len_1 / comp_len_3;
-  const double fill_frac = 0.85;
-  const double balance_frac = ((1-fill_frac) * ratio) * 2.37; // tweaked to almost overflow buckets
+  const double fill_frac = 0.75;
+  const double balance_frac = ((1-fill_frac) * ratio) * 1.66; // tweaked to almost overflow buckets
 
   auto buckets = build_buckets();
   auto ref_buckets = build_buckets();

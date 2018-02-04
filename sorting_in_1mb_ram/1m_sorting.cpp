@@ -565,8 +565,6 @@ uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, u
     start[1] = comp[1];
     start[2] = comp[2];
     start[3] = comp[3];
-    if(comp_len == comp_len_3)
-      return comp_len;
     start[4] = comp[4];
     return comp_len;
   }
@@ -575,10 +573,6 @@ uint32_t write_compressed(uint32_t number, uint8_t* start, uint8_t bit_offset, u
     start[1] = (comp[1] << bit_offset)     | (comp[0] >> (8-bit_offset));
     start[2] = (comp[2] << bit_offset)     | (comp[1] >> (8-bit_offset));
     start[3] = (comp[3] << bit_offset)     | (comp[2] >> (8-bit_offset));
-    if(comp_len == comp_len_3) {
-      start[4] = (comp[3] << (8-bit_offset)) | (start[4] & ~mask);
-      return comp_len;
-    }
     start[4] = (comp[4] << bit_offset)     | (comp[3] >> (8-bit_offset));
     start[5] = (comp[4] << (8-bit_offset)) | (start[5] & ~mask);
     return comp_len;
@@ -599,14 +593,8 @@ comp_int_t compress(uint32_t number) {
     comp[1] = (number - comp_max_1 + 1) % 0x100;
     MY_ASSERT(comp[0] >= comp_max_1);
   }
-  else if(number < comp_max_3) {
-    comp[0] = 254;
-    comp[1] = number & 0xff;
-    comp[2] = (number >> 8) & 0xff;
-    comp[3] = (number >> 16) & 0xff;
-  }
   else {
-    comp[0] = 255;
+    comp[0] = 0xff;
     comp[1] = number & 0xff;
     comp[2] = (number >> 8) & 0xff;
     comp[3] = (number >> 16) & 0xff;
@@ -620,18 +608,14 @@ size_t compress_len(uint32_t number) {
     return comp_len_1;
   if(number < comp_max_2)
     return comp_len_2;
-  if(number < comp_max_3)
-    return comp_len_3;
   return comp_len_4;
 }
 
 size_t compress_len(comp_int_t comp) {
   if(comp[0] < comp_max_1)
     return comp_len_1;
-  if(comp[0] < 254)
+  if(comp[0] < 0xff)
     return comp_len_2;
-  if(comp[0] < 255)
-    return comp_len_3;
   return comp_len_4;
 }
 
@@ -647,31 +631,25 @@ int_len_t decompress(uint8_t* start, uint8_t bit_offset) {
   comp[1] = (start[1] >> bit_offset);
   if(bit_offset)
     comp[1] |= (start[2] << (8-bit_offset));
-  if(comp[0] < 254)
+  if(comp[0] < 0xff)
     return make_pair(decompress(comp), comp_len_2);
 
   comp[2] = (start[2] >> bit_offset);
   comp[3] = (start[3] >> bit_offset);
+  comp[4] = (start[4] >> bit_offset);
   if(bit_offset) {
     comp[2] |= (start[3] << (8-bit_offset));
     comp[3] |= (start[4] << (8-bit_offset));
-  }
-  if(comp[0] < 255)
-    return make_pair(decompress(comp), comp_len_3);
-
-  comp[4] = (start[4] >> bit_offset);
-  if(bit_offset)
     comp[4] |= (start[5] << (8-bit_offset));
+  }
   return make_pair(decompress(comp), comp_len_4);
 }
 
 uint32_t decompress(comp_int_t comp) {
   if(comp[0] < comp_max_1)
     return comp[0];
-  if(comp[0] < 254)
+  if(comp[0] < 0xff)
     return comp_max_1 - 1 + 0x100*(comp[0] - comp_max_1) + comp[1];
-  if(comp[0] < 255)
-    return comp[1] + 0x100 * comp[2] + 0x10000 * comp[3];
   return comp[1] + 0x100 * comp[2] + 0x10000 * comp[3] + 0x1000000 * comp[4];
 }
 
