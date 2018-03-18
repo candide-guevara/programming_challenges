@@ -5,4 +5,5 @@ nurikabe_solver/stl_solver
 **/test_suite
 **/bin
 **/perf.data*
+.vscode
 
