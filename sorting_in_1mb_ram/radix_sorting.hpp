@@ -35,10 +35,11 @@ const static size_t lvl2_flg1  = 1 << lvl2_shf;
 const static size_t lvl2_flg2  = 1 << (1 + lvl2_shf);
 const static size_t lvl2_allf  = lvl2_flg1 + lvl2_flg2;
 const static size_t lvl2_mask  = lvl2_flg1 - 1;
-const static size_t lvl2_xtr   = lvl2_cap / 8;
+const static size_t lvl2_xtr   = 8;
 
 const static uint32_t slot_empty = 0;
 const static uint32_t add_ok = 1;
+const static uint32_t max_offset = 3;
 
 template<class I>
 struct ItContainer {
@@ -74,7 +75,6 @@ struct RadixLvl2It {
     bool operator!=(const RadixLvl2It& rhs) const;
     void move_to_end();
     void advance_chunk_skip_empty(bool=true);
-    uint32_t extract_from_chunk() const;
     uint32_t extract_from_extra() const;
 };
 
@@ -132,9 +132,12 @@ struct RadixLevel2 {
     RadixLevel2();
     uint32_t add_number(uint32_t number);
     uint32_t add_to_extra(uint32_t number);
+    void reorder_after_offset(uint32_t slot, uint32_t offset);
     ItContainer<RadixLvl2It> range() const;
-    uint32_t to_chunk_payload(uint32_t number) const;
+    uint32_t to_chunk_payload(uint32_t number, uint32_t offset) const;
     uint32_t to_extra_payload(uint32_t number) const;
+    uint32_t extract_from_chunk(RadixLvl2It::chunk_t::const_iterator it) const;
+    uint32_t slot_from_number(uint32_t number) const;
 };
 
 struct RadixLevel1 {

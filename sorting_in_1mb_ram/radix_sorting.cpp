@@ -233,13 +233,39 @@ void RadixLvl1It::move_to_end() {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// luckily slot_empty == default value for array element
 RadixLevel2::RadixLevel2() 
-    : chunk {{slot_empty}}, extra{{slot_empty}}, extra_top{} {}
+    : chunk {}, extra{}, extra_top{} {}
 
-uint32_t RadixLevel2::to_chunk_payload(uint32_t number) const {
+uint32_t RadixLevel2::slot_from_number(uint32_t number) const {
+    return (number >> lvl2_shf) % lvl2_cap;
+}
+
+uint32_t RadixLevel2::to_chunk_payload(uint32_t number, uint32_t offset) const {
     auto payload = (number & lvl2_mask);
-    MY_ASSERT(payload < lvl2_flg1);
-    return (payload | lvl2_flg1);
+    auto flags = (offset + 1) << lvl2_shf;
+    MY_ASSERT(payload < lvl2_flg1 && offset < max_offset);
+    return (payload | flags);
+}
+
+void RadixLevel2::reorder_after_offset(uint32_t slot, uint32_t offset) {
+    if(!offset) return;
+
+    std::vector<uint32_t> tmp (max_offset, -1);
+    auto copy_it = tmp.begin();
+    for(auto it = chunk.begin() + slot, end = it+offset+1; 
+            it != end; ++it)
+       *(copy_it++) = extract_from_chunk(it); 
+    algo_srt(tmp);
+
+    copy_it = tmp.begin();
+    for(auto it = chunk.begin() + slot, end = it+offset+1; 
+            it != end; ++it) {
+        auto number = *(copy_it++);
+        auto slot = slot_from_number(number);
+        auto dist = std::distance(chunk.begin(), it);
+        *it = to_chunk_payload(number, dist-slot);
+    }
 }
 
 uint32_t RadixLevel2::to_extra_payload(uint32_t number) const {
@@ -249,15 +275,19 @@ uint32_t RadixLevel2::to_extra_payload(uint32_t number) const {
 }
 
 uint32_t RadixLevel2::add_number(uint32_t number) {
-    auto slot = (number >> lvl2_shf) % lvl2_cap;
+    auto slot = slot_from_number(number);
 
-    if(chunk[slot] == slot_empty) {
-        auto payload = to_chunk_payload(number);
-        chunk[slot] = payload;
-        return add_ok;
-    }
-    auto id = add_to_extra(number);
-    return id;
+    for(uint32_t offset=0; 
+            slot < chunk.size() && offset < max_offset;
+             ++offset, ++slot)
+        if(chunk[slot] == slot_empty) {
+            auto payload = to_chunk_payload(number, offset);
+            chunk[slot] = payload;
+            reorder_after_offset(slot - offset, offset);
+            return add_ok;
+        }
+    auto is_ok = add_to_extra(number);
+    return is_ok;
 }
 
 uint32_t RadixLevel2::add_to_extra(uint32_t number) {
@@ -273,6 +303,14 @@ uint32_t RadixLevel2::add_to_extra(uint32_t number) {
     *it = payload;
     ++extra_top;
     return add_ok;
+}
+
+uint32_t RadixLevel2::extract_from_chunk(RadixLvl2It::chunk_t::const_iterator it) const {
+    uint32_t offset = (*it >> lvl2_shf) - 1;
+    uint32_t dist = std::distance(chunk.begin(), it) - offset;
+    auto result = (dist << lvl2_shf) + (*it & (~lvl2_allf));
+    MY_ASSERT(result < lvl0_flg1 && dist < lvl2_cap && offset < max_offset);
+    return result; 
 }
 
 ItContainer<RadixLvl2It> RadixLevel2::range() const {
@@ -292,13 +330,6 @@ void RadixLvl2It::advance_chunk_skip_empty(bool preincrement) {
         ++chunk_it;
 }
 
-uint32_t RadixLvl2It::extract_from_chunk() const {
-    auto dist = std::distance(parent->chunk.begin(), chunk_it);
-    auto result = (dist << lvl2_shf) + (*chunk_it & (~lvl2_allf));
-    MY_ASSERT(result < lvl0_flg1);
-    return result; 
-}
-
 uint32_t RadixLvl2It::extract_from_extra() const {
     auto result = *extra_it;
     MY_ASSERT(result < lvl0_flg1);
@@ -310,7 +341,7 @@ RadixLvl2It::reference RadixLvl2It::operator*() const {
     auto result = slot_empty;
 
     if(chunk_it != parent->chunk.end()) {
-        result = extract_from_chunk();
+        result = parent->extract_from_chunk(chunk_it);
         if(extra_it != extra_end)
             result = std::min(extract_from_extra(), result);
     }
@@ -324,7 +355,7 @@ RadixLvl2It& RadixLvl2It::operator++() {
     auto extra_end = parent->extra.begin() + parent->extra_top;
 
     if(chunk_it != parent->chunk.end()) {
-        auto chunk_val = extract_from_chunk();
+        auto chunk_val = parent->extract_from_chunk(chunk_it);
         if(extra_it != extra_end && chunk_val > extract_from_extra())
             ++extra_it;
         else advance_chunk_skip_empty();
@@ -504,11 +535,11 @@ void sort_numbers_by_radix() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 int main(void) {
-    //test_add_number_lv0();
-    //test_add_number_lv2();
-    //test_add_number_lv3();
-    //test_add_number_last();
-    //test_add_number_unorder();
+    test_add_number_lv0();
+    test_add_number_lv2();
+    test_add_number_lv3();
+    test_add_number_last();
+    test_add_number_unorder();
     sort_numbers_by_radix();
     LOG("all done");
     return 0;
