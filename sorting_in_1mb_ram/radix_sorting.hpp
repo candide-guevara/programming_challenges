@@ -23,18 +23,22 @@
 const static size_t input_len  = 1000000;
 const static size_t max_number = 100000000;
 const static size_t bits_len   = 27;
-const static size_t lvl0_shf   = 12;
-const static size_t lvl0_len   = 1 << lvl0_shf;
-const static size_t lvl0_mask  = lvl0_len - 1;
-const static size_t lvl0_flag  = 1 << (bits_len - lvl0_shf);
-const static size_t lvl2_shf   = 8;
-const static size_t lvl2_len   = 1 << lvl2_shf;
-const static size_t lvl2_mask  = lvl2_len - 1;
-const static size_t lvl2_flag  = 1 << (bits_len - lvl0_shf - lvl2_shf);
-const static size_t lvl2_xtr   = lvl2_len / 8;
+const static size_t lvl0_shf   = 14;
+const static size_t lvl0_cap   = (max_number >> lvl0_shf) + 1;
+const static size_t lvl0_flg1  = 1 << lvl0_shf;
+const static size_t lvl0_flg2  = 1 << (1 + lvl0_shf);
+const static size_t lvl0_allf  = lvl0_flg1 + lvl0_flg2;
+const static size_t lvl0_mask  = lvl0_flg1 - 1;
+const static size_t lvl2_shf   = 6;
+const static size_t lvl2_cap   = 1 << (lvl0_shf - lvl2_shf);
+const static size_t lvl2_flg1  = 1 << lvl2_shf;
+const static size_t lvl2_flg2  = 1 << (1 + lvl2_shf);
+const static size_t lvl2_allf  = lvl2_flg1 + lvl2_flg2;
+const static size_t lvl2_mask  = lvl2_flg1 - 1;
+const static size_t lvl2_xtr   = lvl2_cap / 8;
 
 const static uint32_t slot_empty = 0;
-const static uint32_t slot_min_val = 1;
+const static uint32_t add_ok = 1;
 
 template<class I>
 struct ItContainer {
@@ -49,7 +53,7 @@ struct RadixLevel1;
 struct RadixLevel2;
 
 struct RadixLvl2It {
-    using chunk_t = std::array<uint8_t, lvl2_len>;
+    using chunk_t = std::array<uint8_t, lvl2_cap>;
     using extra_t = std::array<uint16_t, lvl2_xtr>;
     
     const RadixLevel2* parent;
@@ -160,12 +164,16 @@ struct RadixTree {
 
 struct RadixStats {
     uint32_t free_lv0, take_lv0, chld_lv0;
-    uint32_t size_lv1;
-    uint32_t size_lv2, free_lv2, perc_lv2;
-    uint32_t size_lv3, free_lv3, perc_lv3;
+    uint32_t size_lst;
+    uint32_t size_lv2, free_lv2; 
+    double perc_lv2;
+    uint32_t size_lv3, free_lv3; 
+    double perc_lv3;
 
     void calculate_on(RadixTree&);
     void calculate_on(RadixLevel1&);
     void calculate_on(RadixLevel2&);
+    /// this does not count lvl1 because it if you ar smart you can avoid to allocate a vector
+    size_t total_size_bytes() const;
     std::string to_string() const;
 };
