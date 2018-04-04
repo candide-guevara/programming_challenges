@@ -1,7 +1,7 @@
 busy_beavers/find_beavers
 nurikabe_solver/board_dump.txt
 nurikabe_solver/stl_solver
-compression_fun_and_profit/*.gz
+compression_fun_and_profit/**/*.gz
 **/project
 **/test_suite
 **/bin

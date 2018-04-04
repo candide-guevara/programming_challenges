@@ -92,6 +92,8 @@ class Series:
 def sid_str_to_num(sid):
   return int(sid[2:])
 
+##############################################################################
+
 # array of dataframes
 # each dataframe contains several series (df multindex on security id)
 def load_from_df_chunks(infile, colname):
@@ -111,6 +113,8 @@ def load_from_df_chunks(infile, colname):
           series.add_from_np_maarray(sid, non_na_date, data)
   except EOFError:
     pass # reached end of file
+
+  #logger.debug("loaded sids %r", sorted( m.sid for m in series.meta ))
   logger.info("from %s read %d series", infile, series.count)
   return series
   
@@ -147,6 +151,7 @@ def dump_as_np_series(config, outfile, series):
       fileobj.write(meta.pack())
       fileobj.write(data.data.tobytes())
       #np.save(fileobj, data.data, allow_pickle=False)
+  return outfile
 
 def dump_prob_distribution(config, infile):
   return
