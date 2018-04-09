@@ -1,6 +1,6 @@
 import pandas as pd, numpy as np, gzip
 import pickle
-import common, series_io
+import common, series_io, series_transform
 import unittest as ut
 logger = common.logging.getLogger(__name__)
 
@@ -8,6 +8,7 @@ CHIST_COL = '$CHIST'
 TDATA_SAMPLES = [17, 7, 19]
 CHIST_RAW_FILES = ['test_chist_phmsc_bics_1_tech.gz', 'test_chist_phmsc_xchng_us.gz']
 
+@ut.skip('')
 class TestSeriesIO (ut.TestCase):
 
   @classmethod
@@ -54,6 +55,45 @@ class TestSeriesIO (ut.TestCase):
       assert meta1.count == meta2.count
 
 ### END TestSeriesIO
+
+class TestSeriesTransform (ut.TestCase):
+
+  @classmethod
+  def setUpClass(klass):
+    klass.config = common.parse_args('help msg todo')
+    #klass.make_test_data(['secout_bics_1_tech.gz', 'secout_xchng_us.gz'], CHIST_RAW_FILES)
+
+  def setUp(self):
+    self.config = TestSeriesTransform.config
+
+  def test_normalize_series(self):
+    series = series_io.load_from_df_chunks(CHIST_RAW_FILES[0], CHIST_COL)
+    norm_series = series_transform.normalize_series(self.config, series)
+    lerp_max = series_transform.get_lerp_max(self.config)
+
+    for meta1,meta2 in zip(series.meta, norm_series.meta):
+      self.assertEqual(meta1.sid, meta2.sid)
+      self.assertEqual(meta1.count, meta2.count)
+      self.assertEqual(meta1.start, meta2.start)
+    for meta2,data2 in zip(norm_series.meta, norm_series.data):
+      self.assertTrue(np.any(data2 == 0))
+      self.assertTrue(np.any(data2 == lerp_max), '%r = %d/%d' % (meta2, data2.min(), data2.max()))
+
+  def test_cycle_transformations(self):
+    series = series_io.load_from_df_chunks(CHIST_RAW_FILES[0], CHIST_COL)
+    norm_series = series_transform.normalize_series(self.config, series)
+    delta_series = series_transform.normal_to_delta_series(self.config, norm_series)
+    raw_series = series_transform.delta_to_raw_series(self.config, delta_series)
+
+    logger.debug('start : %r\nend : %r', series.data[2], raw_series.data[2])
+    for meta1,meta2 in zip(series.meta, raw_series.meta):
+      self.assertEqual(meta1.sid, meta2.sid)
+      self.assertEqual(meta1.count, meta2.count)
+      self.assertEqual(meta1.start, meta2.start)
+    for data1,data2 in zip(series.data, raw_series.data):
+      self.assertTrue(np.allclose(data1, data2, rtol=1e-3), '\n%r\n%r' % (data1, data2))
+
+### END TestSeriesTransform
 
 ##############################################################################
 

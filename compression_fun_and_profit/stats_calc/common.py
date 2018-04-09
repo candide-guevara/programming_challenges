@@ -26,6 +26,12 @@ def parse_args (help_msg):
   parser.add_argument ('--int-len',
                         help='The len of each normalized price in bits',
                         default=32)
+  parser.add_argument ('--min-max-equal',
+                        help='The tolerance for considering the series is constant (thus discarding it)',
+                        default=1e-3)
+  parser.add_argument ('--min-max-ratio',
+                        help='The tolerance for series max/min ration before discarding',
+                        default=1000000)
   args = parser.parse_args()
   return args
 

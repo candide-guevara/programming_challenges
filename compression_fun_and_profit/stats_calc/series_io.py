@@ -14,6 +14,9 @@ class MetaBase:
     buf = fileobj.read(klass.size)
     return klass.unpack_from(buf)
 
+  def __repr__(self):
+    return '(%s)' % ', '.join(repr(getattr(self, n)) for n in type(self).__slots__)
+
 class FileHeader(MetaBase):
   __slots__ = ('fformat', 'dformat', 'count')
   fmt = '=hhI'
