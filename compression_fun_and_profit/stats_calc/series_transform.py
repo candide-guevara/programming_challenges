@@ -1,20 +1,21 @@
-import pandas as pd, numpy as np, gzip
-import common, copy, math
+import numpy as np, gzip
+import copy, math
 from series_io import *
-logger = common.logging.getLogger(__name__)
+from common import *
+logger = logging.getLogger(__name__)
 
 def is_series_abnormal(config, meta):
-  assert meta.min > 0
-  if meta.max/meta.min > config.min_max_ratio:
+  assert meta.min >= 0
+  if meta.max/(1+meta.min) > config.min_max_ratio:
     logger.info('rejecting %r because max/min is too wide', meta)
     return True
   if math.isclose(meta.min, meta.max, rel_tol=config.min_max_equal):
     logger.info('rejecting %r because min == max', meta)
     return True
+  if meta.max > 10**9:
+    logger.info('rejecting %r because max price is too high', meta)
+    return True
   return False
-
-def get_lerp_max(config):
-  return 2**(config.int_len - 1) - 1
 
 def normalize_series(config, series):
   assert series.dformat == DFormat.RAW

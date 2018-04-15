@@ -1,12 +1,7 @@
 import pandas as pd, numpy as np, gzip
-import common, pickle, struct
-logger = common.logging.getLogger(__name__)
-
-class DFormat:
-  RAW,NORMAL,DELTA = 0,1,2
-
-class FFormat:
-  UNKNOWN = 0
+import pickle, struct, datetime
+from common import *
+logger = logging.getLogger(__name__)
 
 class MetaBase:
   @classmethod
@@ -92,6 +87,9 @@ class Series:
     meta.count = len(data)
     self.add(meta, data)
 
+  def __repr__(self):
+    return "[count=%d, dformat=%r]\n%r ... %r" % (self.count, self.dformat, self.meta[0], self.meta[-1])
+
 def sid_str_to_num(sid):
   return int(sid[2:])
 
@@ -113,6 +111,7 @@ def load_from_df_chunks(infile, colname):
           start_pos = df.index.get_loc(non_na_date)
           df_valid_slice = df.iloc[:start_pos+1]
           data = np.ma.masked_invalid(df_valid_slice[colname].values)
+          data = np.flip(data, 0)
           series.add_from_np_maarray(sid, non_na_date, data)
   except EOFError:
     pass # reached end of file
@@ -121,16 +120,9 @@ def load_from_df_chunks(infile, colname):
   logger.info("from %s read %d series", infile, series.count)
   return series
   
-def dformat_to_nptype(config, dformat):
-  if dformat == DFormat.RAW:
-    return np.float64
-  if config.int_len == 64:
-    return np.int64
-  return np.int32
-
 # |FileHeader|SerieMetadata|data as bytes|SerieMetadata|data as bytes| ...
 def load_from_np_series(config, infile):
-  with common.my_open(config, infile, 'rb') as fileobj:
+  with my_open(config, infile, 'rb') as fileobj:
     header = FileHeader.unpack_from_file(fileobj)
     series = Series(header.dformat)
     dtype = dformat_to_nptype(config, header.dformat)
@@ -148,7 +140,7 @@ def load_from_compressed_series(config, infile):
 
 def dump_as_np_series(config, outfile, series):
   header = FileHeader(FFormat.UNKNOWN, series.dformat, series.count)
-  with common.my_open(config, outfile, 'wb') as fileobj:
+  with my_open(config, outfile, 'wb') as fileobj:
     fileobj.write(header.pack())
     for meta,data in zip(series.meta, series.data):
       fileobj.write(meta.pack())
@@ -156,6 +148,21 @@ def dump_as_np_series(config, outfile, series):
       #np.save(fileobj, data.data, allow_pickle=False)
   return outfile
 
-def dump_prob_distribution(config, infile):
-  return
+def dump_as_plain_txt(config, outfile, series):
+  one_day = datetime.timedelta(days=1)
+  with my_open(config, outfile, 'w') as fileobj:
+    for meta,data in zip(series.meta, series.data):
+      start = int_to_date(meta.start)
+      fileobj.write("%r\n" % meta)
+      for val,msk in zip(data.base,data.mask):
+        fileobj.write("%s, %r, %r\n" % (start.strftime('%Y%m%d'), val, msk))
+        start += one_day
+      fileobj.write("\n")
+  return outfile
+
+def dump_prob_distribution(config, outfile, prob_dstrb):
+  with open(outfile, 'w') as fileobj:
+    for sym,cum,w in prob_dstrb:
+      fileobj.write("%r,%d,%d\n" % (sym,cum,w))
+  return outfile
 
