@@ -1,6 +1,12 @@
 import numpy as np, gzip
 import logging, sys, os, re, argparse, gzip, uuid, datetime
 
+MAX_PRICE_RATIO = 10**6
+MAX_ABS_PRICE   = 10**8
+MIN_SCALE       = 40_000
+MIN_DATAPOINTS  = 50
+END_MARK        = None
+
 class DFormat:
   RAW,NORMAL,DELTA = 0,1,2
 
@@ -37,7 +43,7 @@ def intlen_to_nptype(config):
 
 def dict_to_np_pairs(dico, key_t, val_t):
   dtype=[('key', key_t), ('val', val_t)]
-  return np.fromiter(dico.items(), dtype=dtype)
+  return np.fromiter(dico.items(), dtype=dtype, count=len(dico))
 
 def parse_args (help_msg):
   parser = argparse.ArgumentParser(help_msg)
@@ -58,15 +64,9 @@ def parse_args (help_msg):
   parser.add_argument ('--int-len',
                         help='The len of each normalized price in bits',
                         default=32)
-  parser.add_argument ('--min-max-equal',
-                        help='The tolerance for considering the series is constant (thus discarding it)',
-                        default=1e-3)
-  parser.add_argument ('--min-max-ratio',
-                        help='The tolerance for series max/min ration before discarding',
-                        default=1000000)
   parser.add_argument ('--alphabet-len',
                         help='The number of symbols inside the alphabet for prob distribution',
-                        default=29)
+                        default=64)
   args = parser.parse_args()
   return args
 

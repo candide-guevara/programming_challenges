@@ -2,8 +2,6 @@ import numpy as np, math
 from common import *
 logger = logging.getLogger(__name__)
 
-END_MARK = None
-
 class Histogram:
 
   def __init__(self):
@@ -25,7 +23,7 @@ class Histogram:
     return sum( (w/self.count) * math.log2(self.count/w) for w in self.buckets.values() )
 
   def calc_stats(self, config):
-    logger.info('calculating stats for %d buckets, ratio %f', len(self.buckets), len(self.buckets)/self.count)
+    logger.info('calculating stats for %d buckets, ratio %f/%f', len(self.buckets), len(self.buckets), self.count)
     count, self.avg, self.std = 0,0.0,0.0
     dtype = intlen_to_nptype(config)
     pairs = dict_to_np_pairs(self.buckets, dtype, np.uint64)
@@ -126,6 +124,11 @@ class SeriesStats:
 
 ### END SeriesStats
 
+def filter_not_relevant_series(data):
+  if len(data) < MIN_DATAPOINTS:
+    return True
+  return False
+
 # the alphabet will be composed of :
 # [ ... -alphabet_len**2, -alphabet_len, ... 0, 1, ... alphabet_len, alphabet_len**2 ... END_MARK ]
 def calc_stats_from_delta_series(config, series):
@@ -133,9 +136,11 @@ def calc_stats_from_delta_series(config, series):
   stats = SeriesStats(config)
 
   for progress,data in enumerate( d.base for d in series.data ):
-    if progress % 100 == 0:
-      logger.info('progress: loading stats for %r', series.meta[progress])
-    counts = np.unique(data, return_counts=True)
+    if filter_not_relevant_series(data): continue
+    if progress % 200 == 0:
+      logger.info('progress[%d]: %r', int(100*progress/series.count), series.meta[progress])
+    # we do not count the first element because it is not a delta
+    counts = np.unique(data[1:], return_counts=True)
     stats.propose_min_max(counts[0][0], counts[0][-1])
     for val,weight in zip(*counts): 
       stats.add_to_buckets(val, weight)

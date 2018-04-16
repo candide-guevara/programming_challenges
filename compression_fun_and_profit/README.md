@@ -11,10 +11,10 @@ To make things simple, compression will be lossy.
 
 For each time series we do the following
 
-* Discard if it has less than `Nd` datapoints
 * Discover `max` and `min` prices
-    * Discard if max > `M_scale` * min
+  * Discard if max > `M_scale` * min
 * Normalize interval `[min,max]` to `[0,2^n-1]`
+  * However if `max-min` is too small we will scale the range `[min, min+Mscale]` instead
 * Calculate deltas in the normal interval (`NaN` are transformed to 0)
 
 

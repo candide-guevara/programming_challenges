@@ -6,16 +6,28 @@ logger = logging.getLogger(__name__)
 
 def is_series_abnormal(config, meta):
   assert meta.min >= 0
-  if meta.max/(1+meta.min) > config.min_max_ratio:
+  if meta.max/(1+meta.min) > MAX_PRICE_RATIO:
     logger.info('rejecting %r because max/min is too wide', meta)
     return True
-  if math.isclose(meta.min, meta.max, rel_tol=config.min_max_equal):
-    logger.info('rejecting %r because min == max', meta)
-    return True
-  if meta.max > 10**9:
+  if meta.max > MAX_ABS_PRICE:
     logger.info('rejecting %r because max price is too high', meta)
     return True
   return False
+
+# if (vmin-vmax) is too small, it is overkill to scale to the whole available range
+def choose_suitable_range(vmin, vmax):
+  vrange = (vmin, vmax)
+  if (vmax - vmin) < MIN_SCALE:
+    vrange = (vmin, vmin+MIN_SCALE)
+  assert vrange[0] < vrange[1]
+  return vrange
+
+def highlight_wtf_deltas(config, meta, deltas):
+  #assert any(deltas.compressed() < 0)
+  index = np.absolute(deltas) > 2 ** (config.int_len - 4)
+  wtf = deltas[index].compressed()
+  if len(wtf):
+    logger.warn("Got huge deltas %r -> %r", meta, wtf)
 
 def normalize_series(config, series):
   assert series.dformat == DFormat.RAW
@@ -26,8 +38,7 @@ def normalize_series(config, series):
   for meta,data in zip(series.meta, series.data):
     assert not data.mask[0], 'serie should start with non Na : %r\n%r' % (meta,data)
     new_meta = copy.copy(meta)
-    new_meta.min = data.min()
-    new_meta.max = data.max()
+    new_meta.min, new_meta.max = choose_suitable_range(data.min(), data.max())
     if is_series_abnormal(config, new_meta):
       continue
     new_data = lerp_max * ((data - new_meta.min) / (new_meta.max - new_meta.min))
@@ -41,9 +52,13 @@ def normal_to_delta_series(config, series):
   new_series = Series(DFormat.DELTA)
   for meta,data in zip(series.meta, series.data):
     new_meta = copy.copy(meta)
-    new_data = np.ediff1d(data.filled(0), to_begin=data[:1])
+    new_data = np.ediff1d(data.compressed(), to_begin=data[:1])
+    nan_index = np.flatnonzero(data.mask)
+    nan_index -= np.arange(len(nan_index))
+    new_data = np.insert(new_data, nan_index, 0)
     new_data = np.ma.MaskedArray(new_data, data.mask)
     new_series.add(new_meta, new_data)
+    #highlight_wtf_deltas(config, meta, new_data)
   logger.info("to delta %d series", series.count)
   return new_series
 

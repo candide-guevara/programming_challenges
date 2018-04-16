@@ -68,6 +68,13 @@ class TestSeriesIO (ut.TestCase):
     expected_lines = sum( len(d) + 1 for d in series.data )
     self.assertGreaterEqual(len(lines), expected_lines)
 
+    series = series_transform.normalize_series(self.config, series)
+    dump_path = series_io.dump_as_plain_txt(
+      TestSeriesIO.config, tmp_stage_name(TestSeriesIO.config), series)
+    series = series_transform.normal_to_delta_series(self.config, series)
+    dump_path = series_io.dump_as_plain_txt(
+      TestSeriesIO.config, tmp_stage_name(TestSeriesIO.config), series)
+
   #@ut.skip('')
   def test_dump_prob_distribution(self):
     series = build_gaussian_series(self.config, 0, 128, 10, 2000)
@@ -81,7 +88,7 @@ class TestSeriesIO (ut.TestCase):
 
 ### END TestSeriesIO
 
-@ut.skip('')
+#@ut.skip('')
 class TestSeriesTransform (ut.TestCase):
 
   @classmethod
@@ -102,8 +109,11 @@ class TestSeriesTransform (ut.TestCase):
       self.assertEqual(meta1.count, meta2.count)
       self.assertEqual(meta1.start, meta2.start)
     for meta2,data2 in zip(norm_series.meta, norm_series.data):
+      vmin, vmax = data2.min(), data2.max()
       self.assertTrue(np.any(data2 == 0))
-      self.assertTrue(np.any(data2 == lerp_max), '%r = %d/%d' % (meta2, data2.min(), data2.max()))
+      self.assertTrue(meta2.max - meta2.min >= MIN_SCALE)
+      self.assertTrue(vmax - vmin >= 0, "%r < %r" % (vmin,vmax))
+      self.assertTrue(np.all(data2 <= lerp_max), '%r = [%d, %d]' % (meta2, vmin, vmax))
 
   #@ut.skip('')
   def test_cycle_transformations(self):
@@ -111,6 +121,7 @@ class TestSeriesTransform (ut.TestCase):
     norm_series = series_transform.normalize_series(self.config, series)
     delta_series = series_transform.normal_to_delta_series(self.config, norm_series)
     raw_series = series_transform.delta_to_raw_series(self.config, delta_series)
+    atol = MIN_SCALE / 2 ** (self.config.int_len-1)
 
     #logger.debug('start : %r\nend : %r', series.data[2], raw_series.data[2])
     for meta1,meta2 in zip(series.meta, raw_series.meta):
@@ -118,11 +129,14 @@ class TestSeriesTransform (ut.TestCase):
       self.assertEqual(meta1.count, meta2.count)
       self.assertEqual(meta1.start, meta2.start)
     for data1,data2 in zip(series.data, raw_series.data):
-      self.assertTrue(np.allclose(data1, data2, rtol=1e-3), '\n%r\n%r' % (data1, data2))
+      outliers = ((data1 - data2) / data2).compressed()
+      outliers = outliers[np.logical_or(outliers<-1e-3, outliers>1e-3)]
+      self.assertTrue(np.array_equal(data1.mask, data2.mask))
+      self.assertTrue(np.allclose(data1, data2, atol=atol, rtol=1e-3), '\n%r' % outliers)
 
 ### END TestSeriesTransform
 
-@ut.skip('')
+#@ut.skip('')
 class TestStatCalculator (ut.TestCase):
 
   @classmethod
