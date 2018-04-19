@@ -14,7 +14,7 @@ def calculate_statistics(config):
   series = series_transform.normal_to_delta_series(config, series)
   stats = series_stats_calc.calc_stats_from_delta_series(config, series)
   logger.info('stats=%r', stats)
-  series_io.dump_prob_distribution(config, config.prob_output, stats.prob_dstrb)
+  series_io.dump_prob_distribution(config, config.prob_output, stats)
   logger.info('prob dstrb dumped into %s', config.prob_output)
 
 def dump_as_plain_txt(config):

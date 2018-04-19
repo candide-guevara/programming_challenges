@@ -160,9 +160,11 @@ def dump_as_plain_txt(config, outfile, series):
       fileobj.write("\n")
   return outfile
 
-def dump_prob_distribution(config, outfile, prob_dstrb):
+def dump_prob_distribution(config, outfile, stats):
   with open(outfile, 'w') as fileobj:
-    for sym,cum,w in prob_dstrb:
+    fileobj.write("# entropy=%r\n# full_histo=%r\n# norm_histo=%r\n" 
+                  % (stats.entropy, stats.full_histo, stats.norm_histo))
+    for sym,cum,w in stats.prob_dstrb:
       fileobj.write("%r,%d,%d\n" % (sym,cum,w))
   return outfile
 

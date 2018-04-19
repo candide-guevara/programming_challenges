@@ -80,10 +80,10 @@ class TestSeriesIO (ut.TestCase):
     series = build_gaussian_series(self.config, 0, 128, 10, 2000)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     dump_path = series_io.dump_prob_distribution(
-      self.config, tmp_stage_name(self.config), stats.prob_dstrb)
+      self.config, tmp_stage_name(self.config), stats)
     with open(dump_path, 'r') as fileobj:
       lines = fileobj.readlines()
-    self.assertEqual(len(lines), len(stats.prob_dstrb))
+    self.assertTrue(len(lines) >= len(stats.prob_dstrb))
 
 
 ### END TestSeriesIO
@@ -161,8 +161,6 @@ class TestStatCalculator (ut.TestCase):
     self.assertTrue(np.isclose(stats.full_histo.std, 0, rtol=0.05))
     self.assertEqual(stats.full_histo.avg, 0.0)
     self.assertEqual(stats.norm_histo.avg, 0.0)
-    self.assertEqual(stats.full_histo.min, 0.0)
-    self.assertEqual(stats.norm_histo.max, 0.0)
     self.assertTrue(self.percentiles_ok(stats.full_histo.perc))
     self.assertTrue(self.percentiles_ok(stats.norm_histo.perc))
 
@@ -170,8 +168,6 @@ class TestStatCalculator (ut.TestCase):
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     self.assertTrue(np.isclose(stats.full_histo.std, 0.0, rtol=0.05))
     self.assertEqual(stats.full_histo.avg, 666)
-    self.assertEqual(stats.full_histo.min, 666)
-    self.assertEqual(stats.full_histo.max, 666)
 
     mu = self.config.alphabet_len - 2
     series = build_gaussian_series(self.config, mu, 0, 10, 2000)
@@ -190,10 +186,6 @@ class TestStatCalculator (ut.TestCase):
     self.assertTrue(np.isclose(stats.full_histo.std, 128, rtol=0.05))
     self.assertTrue(np.isclose(stats.full_histo.avg, 0, atol=2))
     self.assertTrue(np.isclose(stats.norm_histo.avg, 0, atol=2))
-    self.assertTrue(stats.full_histo.min <= -128)
-    self.assertTrue(stats.full_histo.max >= 128)
-    self.assertTrue(stats.full_histo.min <= stats.full_histo.max)
-    self.assertTrue(stats.norm_histo.min <= stats.norm_histo.max)
     self.assertTrue(self.percentiles_ok(stats.full_histo.perc))
     self.assertTrue(self.percentiles_ok(stats.norm_histo.perc))
 
@@ -204,8 +196,6 @@ class TestStatCalculator (ut.TestCase):
     series = series_transform.normal_to_delta_series(self.config, series)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     logger.info("result=\n%r", stats)
-    self.assertTrue(stats.full_histo.min <= stats.norm_histo.min)
-    self.assertTrue(stats.norm_histo.max <= stats.full_histo.max)
     self.assertTrue(self.percentiles_ok(stats.full_histo.perc))
     self.assertTrue(self.percentiles_ok(stats.norm_histo.perc))
 

@@ -7,45 +7,44 @@ class Histogram:
   def __init__(self):
     self.buckets = {}
     self.avg, self.std = None, None
-    self.min, self.max = None, None
     self.perc = {}
+    self.count_w = 0
     self.count = 0
 
   def add_to_buckets(self, val, weight=1):
     self.buckets[val] = self.buckets.get(val, 0) + weight
-    self.count += weight
-
-  def propose_min_max(self, vmin, vmax):
-    if self.max == None or self.max < vmax: self.max = vmax
-    if self.min == None or self.min > vmin: self.min = vmin
+    self.count_w += weight
 
   def entropy(self):
-    return sum( (w/self.count) * math.log2(self.count/w) for w in self.buckets.values() )
+    alph_entropy = sum( (w/self.count_w) * math.log2(self.count_w/w) for w in self.buckets.values() )
+    sym_per_num = self.count_w / self.count
+    assert sym_per_num >= 1
+    return sym_per_num * alph_entropy
 
   def calc_stats(self, config):
-    logger.info('calculating stats for %d buckets, ratio %f/%f', len(self.buckets), len(self.buckets), self.count)
-    count, self.avg, self.std = 0,0.0,0.0
+    logger.info('calculating stats for %d buckets, ratio %f/%f', len(self.buckets), len(self.buckets), self.count_w)
+    count_w, self.avg, self.std = 0,0.0,0.0
     dtype = intlen_to_nptype(config)
     pairs = dict_to_np_pairs(self.buckets, dtype, np.uint64)
     pairs.sort(order='key')
 
     for val,w in pairs:
-      count += w
+      count_w += w
       delta = val - self.avg
-      self.avg += w * delta / count
+      self.avg += w * delta / count_w
       delta2 = val - self.avg
       self.std += delta * delta2 * w
       for perc in (25, 50, 75):
-        if 100*count/self.count >= perc:
+        if 100*count_w/self.count_w >= perc:
           self.perc.setdefault(perc, val)
 
-    #logger.debug("avg=%r, std=%r, count=%r/%r", self.avg, self.std, self.count, count)
-    assert count and count == self.count and self.std >= 0
-    self.std = math.sqrt(self.std / self.count)
+    #logger.debug("avg=%r, std=%r, count_w=%r/%r", self.avg, self.std, self.count_w, count_w)
+    assert count_w and count_w == self.count_w and self.std >= 0
+    self.std = math.sqrt(self.std / self.count_w)
 
   def __repr__(self):
-    return "[avg=%r, std=%r, min=%r, max=%r, perc=%r]" \
-      % (self.avg, self.std, self.min, self.max, self.perc)
+    return "[avg=%r, std=%r, perc=%r, count=%r, w/count=%r]" \
+      % (self.avg, self.std, self.perc, self.count, self.count_w/self.count)
 
 ### END Histogram
 
@@ -53,7 +52,7 @@ class SeriesStats:
 
   def __init__(self, config):
     self.alphabet_len = config.alphabet_len
-    self.entroopy = None
+    self.entropy = None
     self.full_histo = Histogram()
     self.norm_histo = Histogram()
     self.prob_dstrb = []
@@ -73,16 +72,18 @@ class SeriesStats:
     return poly
 
   def decompose_in_base(self, base, num):
+    i = 0
     sign = 1
     if num < 0:
       sign = -1
       num = -num
     poly = [(sign * (num % base), 1)]
-    i = 0
-    while num >= base:
+    while num >= base and i < 4:
       num //= base
       i += 1
       poly.append((sign * base**i, num % base))
+    if i == 4:
+      poly[-1] = (poly[-1][0], num)
     return poly
 
   def add_to_buckets(self, val, weight):
@@ -91,16 +92,14 @@ class SeriesStats:
     for v,w in poly:
       if w: self.norm_histo.add_to_buckets(v, weight * w)
 
-  def propose_min_max(self, vmin, vmax):
-    self.full_histo.propose_min_max(vmin, vmax)
-    poly1 = self.decompose_in_base(self.alphabet_len, vmin)
-    poly2 = self.decompose_in_base(self.alphabet_len, vmax)
-    self.norm_histo.propose_min_max(poly1[-1][0], poly2[-1][0])
+  def added_points(self, count):
+    self.full_histo.count += count
+    self.norm_histo.count += count
 
   def calc_stats(self, config, count_series):
     self.full_histo.calc_stats(config)
     self.norm_histo.calc_stats(config)
-    self.entropy = self.full_histo.entropy()
+    self.entropy = (self.full_histo.entropy(), self.norm_histo.entropy())
     self.prob_dstrb = self.calc_prob_dstrb(self.norm_histo.buckets, count_series, config.int_len)
 
   def calc_prob_dstrb(self, buckets, count_series, int_len):
@@ -141,9 +140,9 @@ def calc_stats_from_delta_series(config, series):
       logger.info('progress[%d]: %r', int(100*progress/series.count), series.meta[progress])
     # we do not count the first element because it is not a delta
     counts = np.unique(data[1:], return_counts=True)
-    stats.propose_min_max(counts[0][0], counts[0][-1])
     for val,weight in zip(*counts): 
       stats.add_to_buckets(val, weight)
+    stats.added_points(len(data) - 1)
 
   stats.calc_stats(config, len(series.data))
   return stats
