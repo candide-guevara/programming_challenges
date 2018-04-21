@@ -1,5 +1,5 @@
 import pandas as pd, numpy as np, gzip
-import pickle, struct, datetime
+import pickle, struct, datetime as dt
 from common import *
 logger = logging.getLogger(__name__)
 
@@ -90,9 +90,6 @@ class Series:
   def __repr__(self):
     return "[count=%d, dformat=%r]\n%r ... %r" % (self.count, self.dformat, self.meta[0], self.meta[-1])
 
-def sid_str_to_num(sid):
-  return int(sid[2:])
-
 ##############################################################################
 
 # array of dataframes
@@ -149,7 +146,7 @@ def dump_as_np_series(config, outfile, series):
   return outfile
 
 def dump_as_plain_txt(config, outfile, series):
-  one_day = datetime.timedelta(days=1)
+  one_day = dt.timedelta(days=1)
   with my_open(config, outfile, 'w') as fileobj:
     for meta,data in zip(series.meta, series.data):
       start = int_to_date(meta.start)
@@ -167,4 +164,49 @@ def dump_prob_distribution(config, outfile, stats):
     for sym,cum,w in stats.prob_dstrb:
       fileobj.write("%r,%d,%d\n" % (sym,cum,w))
   return outfile
+
+def sid_str_to_num(sid):
+  return int(sid[2:])
+
+##############################################################################
+
+def build_ordered_series(config, count_series, count_dates):
+  series = Series(DFormat.DELTA)
+  start = offset_from_today_to_int(count_dates)
+  dtype = intlen_to_nptype(config)
+  for i in range(count_series):
+    meta = SerieMetadata()
+    meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, count_dates-1, count_dates
+    data = np.arange(count_dates, dtype=dtype)
+    data = np.ma.masked_array(data, data == np.nan)
+    #logger.debug("%r, %r", data.mean(), data.base)
+    series.add(meta, data)
+  return series
+
+def build_gaussian_series(config, mu, sig, count_series, count_dates):
+  series = Series(DFormat.DELTA)
+  start = offset_from_today_to_int(count_dates)
+  dtype = intlen_to_nptype(config)
+  for i in range(count_series):
+    meta = SerieMetadata()
+    meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, 1000, count_dates
+    data = sig * np.random.randn(count_dates) + mu
+    data = np.ma.masked_array(data, data == np.nan, dtype=dtype)
+    #logger.debug("%r, %r", data.mean(), data.base)
+    series.add(meta, data)
+  return series
+
+def build_random_series(config, count_series, count_dates):
+  series = Series(DFormat.DELTA)
+  start = offset_from_today_to_int(count_dates)
+  scale = 2 ** (config.int_len - 1)
+  dtype = intlen_to_nptype(config)
+  for i in range(count_series):
+    meta = SerieMetadata()
+    meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, 1000, count_dates
+    data = np.random.randint(-scale, scale - 1, count_dates)
+    data = np.ma.masked_array(data, data == np.nan, dtype=dtype)
+    #logger.debug("%r, %r", data.mean(), data.base)
+    series.add(meta, data)
+  return series
 

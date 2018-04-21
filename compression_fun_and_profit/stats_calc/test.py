@@ -77,7 +77,7 @@ class TestSeriesIO (ut.TestCase):
 
   #@ut.skip('')
   def test_dump_prob_distribution(self):
-    series = build_gaussian_series(self.config, 0, 128, 10, 2000)
+    series = series_io.build_gaussian_series(self.config, 0, 128, 10, 2000)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     dump_path = series_io.dump_prob_distribution(
       self.config, tmp_stage_name(self.config), stats)
@@ -156,7 +156,7 @@ class TestStatCalculator (ut.TestCase):
 
   #@ut.skip('')
   def test_stat_calc_on_constant(self):
-    series = build_gaussian_series(self.config, 0, 0, 10, 2000)
+    series = series_io.build_gaussian_series(self.config, 0, 0, 10, 2000)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     self.assertTrue(np.isclose(stats.full_histo.std, 0, rtol=0.05))
     self.assertEqual(stats.full_histo.avg, 0.0)
@@ -164,13 +164,13 @@ class TestStatCalculator (ut.TestCase):
     self.assertTrue(self.percentiles_ok(stats.full_histo.perc))
     self.assertTrue(self.percentiles_ok(stats.norm_histo.perc))
 
-    series = build_gaussian_series(self.config, 666, 0, 10, 2000)
+    series = series_io.build_gaussian_series(self.config, 666, 0, 10, 2000)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     self.assertTrue(np.isclose(stats.full_histo.std, 0.0, rtol=0.05))
     self.assertEqual(stats.full_histo.avg, 666)
 
     mu = self.config.alphabet_len - 2
-    series = build_gaussian_series(self.config, mu, 0, 10, 2000)
+    series = series_io.build_gaussian_series(self.config, mu, 0, 10, 2000)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     logger.info("result=\n%r", stats)
     self.assertTrue(np.isclose(stats.full_histo.std, 0.0, rtol=0.05))
@@ -180,7 +180,7 @@ class TestStatCalculator (ut.TestCase):
 
   #@ut.skip('')
   def test_stat_calc_on_random(self):
-    series = build_gaussian_series(self.config, 0, 128, 10, 2000)
+    series = series_io.build_gaussian_series(self.config, 0, 128, 10, 2000)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
     #logger.info("result=\n%r", stats)
     self.assertTrue(np.isclose(stats.full_histo.std, 128, rtol=0.05))
@@ -234,35 +234,6 @@ class TestStatCalculator (ut.TestCase):
     self.assertTrue( all(i==j for i,j in zip(poly, [(61, 1), (64, 55), (4096, 63), (262144, 0), (-16777216, 1)])), poly )
 
 ### END TestStatCalculator
-
-def build_gaussian_series(config, mu, sig, count_series, count_dates):
-  series = series_io.Series(series_io.DFormat.DELTA)
-  start = dt.date.today() - dt.timedelta(days=count_dates)
-  dtype = intlen_to_nptype(config)
-  for i in range(count_series):
-    meta = series_io.SerieMetadata()
-    meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, 1000, count_dates
-    data = sig * np.random.randn(count_dates) + mu
-    data = np.ma.MaskedArray(data, dtype=dtype)
-    #logger.debug("%r, %r", data.mean(), data.base)
-    series.add(meta, data)
-  return series
-
-def build_random_series(config, count_series, count_dates):
-  series = series_io.Series(series_io.DFormat.DELTA)
-  start = dt.date.today() - dt.timedelta(days=count_dates)
-  scale = 2 ** (config.int_len - 1)
-  dtype = intlen_to_nptype(config)
-  for i in range(count_series):
-    meta = series_io.SerieMetadata()
-    meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, 1000, count_dates
-    data = np.random.randint(-scale, scale - 1, count_dates)
-    data = np.ma.MaskedArray(data, dtype=dtype)
-    #logger.debug("%r, %r", data.mean(), data.base)
-    series.add(meta, data)
-  return series
-
-##############################################################################
 
 if __name__ == '__main__':
   ut.main(argv=[__name__])

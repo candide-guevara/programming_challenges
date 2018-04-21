@@ -47,6 +47,7 @@ dbg: $(BIN_DIR) $(BIN_DIR)/compressor_dbg
 
 compressor_test: dbg
 	cp etc/prob_dstr* $(BIN_DIR)
+	cp etc/*.bin $(BIN_DIR)
 	pushd $(BIN_DIR)
 	./compressor_dbg	
 

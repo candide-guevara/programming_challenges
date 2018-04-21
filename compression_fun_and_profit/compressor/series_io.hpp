@@ -40,7 +40,7 @@ struct Series {
   std::vector<std::vector<delta_t>> data;
   
   explicit Series(DFormat format, uint32_t count);
-  size_t count() { return data.size(); }
+  size_t count() const { return data.size(); }
 };
 
 using ProbTuple = std::tuple<symb_t, prob_t, prob_t>;
@@ -52,4 +52,6 @@ using ProbDstrb = std::vector<ProbTuple>;
 std::unique_ptr<Series> read_series_from_file(std::string filepath);
 std::unique_ptr<ProbDstrb> read_prob_dstrb_from_file(std::string filepath);
 std::string prod_to_string(const ProbDstrb& dstrb);
+std::string seriesmeta_to_string(const SeriesMetadata& meta);
+std::string series_to_string(const Series& series);
 

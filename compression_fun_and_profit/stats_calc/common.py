@@ -26,6 +26,10 @@ def int_to_date(int_date):
                        month = (int_date//100) % 100,
                        day   = int_date % 100)
 
+def offset_from_today_to_int(count_dates):
+  dd = datetime.date.today() - datetime.timedelta(days=count_dates)
+  return dd.year * 10000 + dd.month * 100 + dd.day
+
 def get_lerp_max(config):
   return 2**(config.int_len - 1) - 1
 
@@ -79,6 +83,8 @@ def __init_log__ ():
     resetFnt = '\033[0m'
     format = '%s%%(levelname)s-%s%%(name)s::%%(funcName)s-> %s%%(message)s' % (blueFnt, greenFnt, resetFnt)
   logging.basicConfig(level = logging.DEBUG, format = format)
+
+##############################################################################
 
 __init_log__()
 

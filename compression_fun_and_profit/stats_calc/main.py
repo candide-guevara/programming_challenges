@@ -5,7 +5,8 @@ logger = logging.getLogger(__name__)
 def main(config):
   logger.info('main start')
   #dump_as_plain_txt(config)
-  calculate_statistics(config)
+  dump_test_series(config)
+  #calculate_statistics(config)
   logger.info('main end')
 
 def calculate_statistics(config):
@@ -27,6 +28,17 @@ def dump_as_plain_txt(config):
   series = series_transform.normal_to_delta_series(config, series)
   dump_path = series_io.dump_as_plain_txt(config, tmp_stage_name(config), series)
   logger.info('delta series=%r', dump_path)
+
+def dump_test_series(config):
+  series = series_io.build_gaussian_series(config, 0, 1000, 3, 2000)
+  dump_path = series_io.dump_as_np_series(config, tmp_stage_name(config), series)
+  logger.info('gaussian series 0=%r', dump_path)
+  series = series_io.build_gaussian_series(config, 666, 10000, 3, 2000)
+  dump_path = series_io.dump_as_np_series(config, tmp_stage_name(config), series)
+  logger.info('gaussian series 666=%r', dump_path)
+  series = series_io.build_ordered_series(config, 3, 2000)
+  dump_path = series_io.dump_as_np_series(config, tmp_stage_name(config), series)
+  logger.info('ordered series=%r', dump_path)
 
 if __name__ == '__main__':
   config = parse_args('help msg todo')

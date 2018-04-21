@@ -52,8 +52,8 @@ std::unique_ptr<Series> read_series_from_file(std::string filepath) {
     meta = read_pod<SeriesMetadata>(fin);
     data.resize(meta.count);
     fin.read((char*)data.data(), meta.count * sizeof(delta_t));
-    MY_ASSERT(fin.get() == std::ifstream::traits_type::eof());
   }
+  MY_ASSERT(fin.get() == std::ifstream::traits_type::eof());
   return series;
 }
 
@@ -78,10 +78,30 @@ std::unique_ptr<ProbDstrb> read_prob_dstrb_from_file(std::string filepath) {
   return dstrb;
 }
 
-std::string prod_to_string(const ProbDstrb& dstrb) {
+std::string prob_to_string(const ProbDstrb& dstrb) {
   auto buf = std::stringstream{};
   for(auto [sym,cum,w] : dstrb)
     buf << sym << "," << cum << "," << w << std::endl;
+  return buf.str();
+}
+
+std::string seriesmeta_to_string(const SeriesMetadata& meta) {
+  auto buf = std::stringstream{};
+  buf << "sid=" << meta.sid 
+      << "min=" << meta.min << "max=" << meta.max 
+      << "start=" << meta.start << "count=" << meta.count;
+  return buf.str();
+}
+
+std::string series_to_string(const Series& series) {
+  auto buf = std::stringstream{};
+  for(uint32_t i=0; i<series.count(); ++i) {
+    auto& meta = series.meta[i];
+    auto& data = series.data[i];
+    buf << seriesmeta_to_string(meta) << std::endl;
+    for(uint32_t j=0; j<(data.size() < 10 ? data.size() : 10); ++j)    
+      buf << data[j] << std::endl;
+  }
   return buf.str();
 }
 
