@@ -179,6 +179,15 @@ class TestStatCalculator (ut.TestCase):
     self.assertEqual(stats.norm_histo.avg, mu)
 
   #@ut.skip('')
+  def test_aggregate_head_tail(self):
+    a = self.config.alphabet_len ** 4
+    dstrb = [(-3*a, 1, 1), (-2*a, 2, 1), (-a, 3, 1), (0, 4, 1), (a, 5, 1), (2*a, 6, 1), (3*a, 7, 1), ]
+    expected = [(-a, 3, 3), (0, 4, 1), (a, 7, 3), ]
+    calculator = series_stats_calc.SeriesStats(self.config)
+    new_dstrb = calculator.aggregate_head_tail(self.config, dstrb)
+    self.assertTrue( all(i==j for i,j in zip(new_dstrb, expected)), repr(new_dstrb) )
+
+  #@ut.skip('')
   def test_stat_calc_on_random(self):
     series = series_io.build_gaussian_series(self.config, 0, 128, 10, 2000)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
@@ -202,18 +211,20 @@ class TestStatCalculator (ut.TestCase):
   #@ut.skip('')
   def test_decompose_in_base(self):
     calculator = series_stats_calc.SeriesStats(self.config)
+    poly = calculator.decompose_in_base(64, 0)
+    self.assertTrue( all(i==j for i,j in zip(poly, [(0, 1)])) )
     poly = calculator.decompose_in_base(64, 12)
     self.assertTrue( all(i==j for i,j in zip(poly, [(12, 1)])) )
     poly = calculator.decompose_in_base(64, 65)
     self.assertTrue( all(i==j for i,j in zip(poly, [(1, 1), (64, 1)])) )
     poly = calculator.decompose_in_base(64, 64**3+64*8+3)
-    self.assertTrue( all(i==j for i,j in zip(poly, [(3, 1), (64, 8), (64**2,0), (64**3, 1)])) )
+    self.assertTrue( all(i==j for i,j in zip(poly, [(3, 1), (64*8, 1), (64**3, 1)])), repr(poly) )
     poly = calculator.decompose_in_base(64, -12)
     self.assertTrue( all(i==j for i,j in zip(poly, [(-12, 1)])) )
     poly = calculator.decompose_in_base(64, -65)
     self.assertTrue( all(i==j for i,j in zip(poly, [(-1, 1), (-64, 1)])) )
     poly = calculator.decompose_in_base(64, -64**3-64*8-3)
-    self.assertTrue( all(i==j for i,j in zip(poly, [(-3, 1), (-64, 8), (-64**2,0), (-64**3, 1)])) )
+    self.assertTrue( all(i==j for i,j in zip(poly, [(-3, 1), (-64*8, 1), (-64**3, 1)])) )
 
   #@ut.skip('')
   def test_decompose_in_base_pos(self):

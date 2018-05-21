@@ -4,8 +4,9 @@ logger = logging.getLogger(__name__)
 
 def main(config):
   logger.info('main start')
+  dump_real_series(config)
   #dump_as_plain_txt(config)
-  dump_test_series(config)
+  #dump_test_series(config)
   #calculate_statistics(config)
   logger.info('main end')
 
@@ -39,6 +40,11 @@ def dump_test_series(config):
   series = series_io.build_ordered_series(config, 3, 2000)
   dump_path = series_io.dump_as_np_series(config, tmp_stage_name(config), series)
   logger.info('ordered series=%r', dump_path)
+
+def dump_real_series(config):
+  series = series_io.load_from_df_chunks(config.raw_input, config.col_name)
+  dump_path = series_io.dump_as_np_series(config, tmp_stage_name(config), series)
+  logger.info('%r=%r', config.raw_input, dump_path)
 
 if __name__ == '__main__':
   config = parse_args('help msg todo')

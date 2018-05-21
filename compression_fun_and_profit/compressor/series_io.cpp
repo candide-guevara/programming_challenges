@@ -3,11 +3,6 @@
 #include <sstream>
 #include <regex>
 
-Series::Series(DFormat format, uint32_t count) 
-  : dformat(format)
-  , meta(count)
-  , data(count) {}
-
 template<class T>
 T read_pod(std::ifstream& fin) {
   static_assert(std::is_pod<T>::value, "");

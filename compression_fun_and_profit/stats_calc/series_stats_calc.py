@@ -34,11 +34,11 @@ class Histogram:
       self.avg += w * delta / count_w
       delta2 = val - self.avg
       self.std += delta * delta2 * w
-      for perc in (25, 50, 75):
-        if 100*count_w/self.count_w >= perc:
+      for perc in range(10,100,10):
+        if 100.*count_w/self.count_w >= perc:
           self.perc.setdefault(perc, val)
 
-    #logger.debug("avg=%r, std=%r, count_w=%r/%r", self.avg, self.std, self.count_w, count_w)
+    logger.debug("perc=%r", { p:self.buckets[v] for p,v in self.perc.items() })
     assert count_w and count_w == self.count_w and self.std >= 0
     self.std = math.sqrt(self.std / self.count_w)
 
@@ -72,18 +72,17 @@ class SeriesStats:
     return poly
 
   def decompose_in_base(self, base, num):
-    i = 0
-    sign = 1
+    if num == 0: return [(0,1)]
+    coef = 1
+    poly = []
     if num < 0:
-      sign = -1
+      coef = -1
       num = -num
-    poly = [(sign * (num % base), 1)]
-    while num >= base and i < 4:
+    while num:
+      q = num % base
+      if q: poly.append((coef * q, 1))
       num //= base
-      i += 1
-      poly.append((sign * base**i, num % base))
-    if i == 4:
-      poly[-1] = (poly[-1][0], num)
+      coef *= base
     return poly
 
   def add_to_buckets(self, val, weight):
@@ -100,22 +99,46 @@ class SeriesStats:
     self.full_histo.calc_stats(config)
     self.norm_histo.calc_stats(config)
     self.entropy = (self.full_histo.entropy(), self.norm_histo.entropy())
-    self.prob_dstrb = self.calc_prob_dstrb(self.norm_histo.buckets, count_series, config.int_len)
+    self.prob_dstrb = self.calc_prob_dstrb(config, self.norm_histo.buckets, count_series)
 
-  def calc_prob_dstrb(self, buckets, count_series, int_len):
-    cumsum = count_series
-    max_prob = 2 ** int_len
-    irreg_dstrb = [(END_MARK, cumsum, count_series)]
+  def calc_prob_dstrb(self, config, buckets, count_series):
+    cumsum = 0
+    irreg_dstrb = []
     for val,w in sorted(buckets.items()):
       cumsum += w
       irreg_dstrb.append((val, cumsum, w))
+    irreg_dstrb = self.aggregate_head_tail(config, irreg_dstrb)
+    cumsum += count_series
+    irreg_dstrb.append((END_MARK, cumsum, count_series))
 
+    max_prob = 2 ** config.int_len
     scale = max_prob / cumsum
     #logger.debug('scale=%r, max_ratio=%r', scale, max( t[2] for t in irreg_dstrb )/cumsum)
     prob_dstrb = [ (v, int(scale*c), int(scale*w)) for v,c,w in irreg_dstrb ]
     prob_dstrb[-1] = (prob_dstrb[-1][0], max_prob, prob_dstrb[-1][2])
     return prob_dstrb
 
+  def aggregate_head_tail(self, config, dstrb):
+    min_w, max_w = 0,0
+    cutoff_val = config.alphabet_len ** 4
+    new_dstrb = []
+
+    for val,cum,w in dstrb:
+      if val <= -cutoff_val:
+        min_w += w
+        if new_dstrb:
+          new_dstrb[0] = (-cutoff_val, cum, min_w)
+        else:
+          new_dstrb.append( (-cutoff_val, cum, min_w) )
+      elif val >= cutoff_val:
+        max_w += w
+        if new_dstrb[-1][0] == cutoff_val:
+          new_dstrb[-1] = (cutoff_val, cum, max_w)
+        else:
+          new_dstrb.append( (cutoff_val, cum, max_w) )
+      else:
+        new_dstrb.append((val,cum,w))
+    return new_dstrb
 
   def __repr__(self):
     return "entropy=%r, \nfull=%r, \nnorm=%r, \ndstrb=%r" \
