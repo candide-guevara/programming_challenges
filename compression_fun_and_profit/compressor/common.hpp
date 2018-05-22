@@ -22,6 +22,8 @@ using prob_t = uint64_t;
 
 constexpr symb_t END_MARKER = -1 >> 1;
 constexpr prob_t MAX_PROB = 1ull << 32;
+constexpr prob_t MAX_PROB_MASK = MAX_PROB - 1;
+constexpr prob_t LAST_PROB_DIGIT_MASK = MAX_PROB >> 1;
 constexpr size_t ALPHA_LEN = 64;
 constexpr char COMMENT = '#';
 

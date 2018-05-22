@@ -73,6 +73,20 @@ std::unique_ptr<ProbDstrb> read_prob_dstrb_from_file(std::string filepath) {
   return dstrb;
 }
 
+void dump_compressed_to_file(const Compressed& comp, std::string filename) {
+  auto fout = std::ofstream(filename, std::ios::binary | std::ios::out);
+  MY_ASSERT(fout);
+  FileHeader header = { FFormat::UNKNOWN, DFormat::BYTE_COMP, static_cast<uint32_t>(comp.count()) };
+  fout.write(reinterpret_cast<const char*>(&header), sizeof(FileHeader));
+  for(uint32_t i=0; i<comp.count(); ++i) {
+    auto& meta = comp.meta[i];
+    auto& data = comp.data[i];
+    fout.write(reinterpret_cast<const char*>(&meta), sizeof(SeriesMetadata));
+    fout.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(Compressed::data_type));
+  }
+  MY_ASSERT(fout);
+}
+
 std::string prob_to_string(const ProbDstrb& dstrb) {
   auto buf = std::stringstream{};
   for(auto [sym,cum,w] : dstrb)

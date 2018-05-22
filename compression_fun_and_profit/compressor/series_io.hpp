@@ -15,7 +15,7 @@ enum class DFormat : uint16_t {
   RAW = 0,
   NORMAL = 1,
   DELTA = 2,
-  BYTE_COMP = 2,
+  BYTE_COMP = 3,
 };
 
 enum class FFormat : uint16_t {
@@ -39,6 +39,7 @@ ASSERT_POD(SeriesMetadata);
 template<class T>
 struct SeriesTmpl {
   DFormat dformat;
+  using data_type = typename T::value_type;
   std::vector<SeriesMetadata> meta;
   std::vector<T> data;
   
@@ -48,8 +49,8 @@ struct SeriesTmpl {
     , data(count) {}
 
   size_t count() const { return data.size(); }
-  size_t data_bytes() const { return std::accumulate(RANGE(data), 0, [](auto& s) { return s.size() * sizeof(T); }); }
-  size_t meta_bytes() const { return std::accumulate(RANGE(meta), 0, [](auto& s) { return s.size() * sizeof(SeriesMetadata); }); }
+  size_t data_bytes() const { return std::accumulate(RANGE(data), 0, [](auto acc, const auto& s) { return acc + s.size() * sizeof(data_type); }); }
+  size_t meta_bytes() const { return sizeof(SeriesMetadata) * meta.size(); }
   size_t total_bytes() const { return sizeof(DFormat) + data_bytes() + meta_bytes(); }
 };
 using Series = SeriesTmpl<std::vector<delta_t>>;
@@ -63,6 +64,8 @@ using ProbDstrb = std::vector<ProbTuple>;
 
 std::unique_ptr<Series> read_series_from_file(std::string filepath);
 std::unique_ptr<ProbDstrb> read_prob_dstrb_from_file(std::string filepath);
+void dump_compressed_to_file(const Compressed& comp, std::string filename);
+
 std::string prob_to_string(const ProbDstrb& dstrb);
 std::string seriesmeta_to_string(const SeriesMetadata& meta);
 std::string series_to_string(const Series& series);

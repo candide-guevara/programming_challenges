@@ -91,6 +91,7 @@ void byte_compress_real_series() {
   for(auto& name : names) {
     auto series = read_series_from_file(name);
     auto compressed = byte_compress_from_delta(*series);
+    dump_compressed_to_file(*compressed, name + ".comp");
     auto data_ratio = 1.0*series->data_bytes() / compressed->data_bytes();
     auto total_ratio = 1.0*series->total_bytes() / compressed->total_bytes();
     LOG(name << " : data_ratio=" << data_ratio << ", total_ratio=" << total_ratio
