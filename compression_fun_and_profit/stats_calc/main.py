@@ -43,8 +43,10 @@ def dump_test_series(config):
 
 def dump_real_series(config):
   series = series_io.load_from_df_chunks(config.raw_input, config.col_name)
-  dump_path = series_io.dump_as_np_series(config, tmp_stage_name(config), series)
-  logger.info('%r=%r', config.raw_input, dump_path)
+  norm_series = series_transform.normalize_series(config, series)
+  delta_series = series_transform.normal_to_delta_series(config, norm_series)
+  dump_path = series_io.dump_as_np_series(config, tmp_stage_name(config), delta_series)
+  logger.info('%r=%r / %r', config.raw_input, dump_path, delta_series)
 
 if __name__ == '__main__':
   config = parse_args('help msg todo')

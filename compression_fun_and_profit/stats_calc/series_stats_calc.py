@@ -119,26 +119,31 @@ class SeriesStats:
     return prob_dstrb
 
   def aggregate_head_tail(self, config, dstrb):
-    min_w, max_w = 0,0
+    min_w, max_w, extra_w_min, extra_w_max = 0,0,0,0
     cutoff_val = config.alphabet_len ** 4
-    new_dstrb = []
+    new_dstrb= {}
 
     for val,cum,w in dstrb:
       if val <= -cutoff_val:
-        min_w += w
-        if new_dstrb:
-          new_dstrb[0] = (-cutoff_val, cum, min_w)
-        else:
-          new_dstrb.append( (-cutoff_val, cum, min_w) )
+        extra_w_min += w * (val//-cutoff_val - 1)
+        min_w += w 
+        new_dstrb[-cutoff_val] = [-cutoff_val, cum, min_w]
       elif val >= cutoff_val:
-        max_w += w
-        if new_dstrb[-1][0] == cutoff_val:
-          new_dstrb[-1] = (cutoff_val, cum, max_w)
-        else:
-          new_dstrb.append( (cutoff_val, cum, max_w) )
+        extra_w_max += w * (val//cutoff_val - 1)
+        max_w += w 
+        new_dstrb[cutoff_val] = [cutoff_val, cum, max_w]
       else:
-        new_dstrb.append((val,cum,w))
-    return new_dstrb
+        new_dstrb[val] = [val,cum,w]
+
+    assert extra_w_min >= 0 and extra_w_max >= 0
+    for l in new_dstrb.values():
+      l[1] += extra_w_min
+    if -cutoff_val in new_dstrb:
+      new_dstrb[-cutoff_val][2] += extra_w_min
+    if cutoff_val in new_dstrb:
+      new_dstrb[cutoff_val][1] += extra_w_max
+      new_dstrb[cutoff_val][2] += extra_w_max
+    return [ tuple(v) for k,v in sorted(new_dstrb.items()) ]
 
   def __repr__(self):
     return "entropy=%r, \nfull=%r, \nnorm=%r, \ndstrb=%r" \

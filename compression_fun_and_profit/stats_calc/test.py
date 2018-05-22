@@ -181,9 +181,15 @@ class TestStatCalculator (ut.TestCase):
   #@ut.skip('')
   def test_aggregate_head_tail(self):
     a = self.config.alphabet_len ** 4
-    dstrb = [(-3*a, 1, 1), (-2*a, 2, 1), (-a, 3, 1), (0, 4, 1), (a, 5, 1), (2*a, 6, 1), (3*a, 7, 1), ]
-    expected = [(-a, 3, 3), (0, 4, 1), (a, 7, 3), ]
     calculator = series_stats_calc.SeriesStats(self.config)
+
+    dstrb = [(-3*a, 1, 1), (-2*a, 2, 1), (-a, 3, 1), (0, 4, 1), (a, 5, 1), (2*a, 6, 1), (3*a, 7, 1), ]
+    expected = [(-a, 6, 6), (0, 7, 1), (a, 13, 6), ]
+    new_dstrb = calculator.aggregate_head_tail(self.config, dstrb)
+    self.assertTrue( all(i==j for i,j in zip(new_dstrb, expected)), repr(new_dstrb) )
+
+    dstrb = [(-a, 1, 1), (-2, 3, 2), (-1, 4, 1), (0, 7, 3), (1, 8, 1), (2, 9, 1), (a, 11, 2), ]
+    expected = [(-a, 1, 1), (-2, 3, 2), (-1, 4, 1), (0, 7, 3), (1, 8, 1), (2, 9, 1), (a, 11, 2), ]
     new_dstrb = calculator.aggregate_head_tail(self.config, dstrb)
     self.assertTrue( all(i==j for i,j in zip(new_dstrb, expected)), repr(new_dstrb) )
 

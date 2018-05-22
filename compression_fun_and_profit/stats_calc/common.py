@@ -8,7 +8,7 @@ MIN_DATAPOINTS  = 50
 END_MARK        = None
 
 class DFormat:
-  RAW,NORMAL,DELTA = 0,1,2
+  RAW,NORMAL,DELTA,BYTE_COMP = 0,1,2,3
 
 class FFormat:
   UNKNOWN = 0
