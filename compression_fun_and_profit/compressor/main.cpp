@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
   //test_read_series_delta_from_file();
   //test_number_byte_codec();
   //test_series_byte_codec();
-  byte_compress_real_series();
+  //byte_compress_real_series();
   return 0;
 }
 

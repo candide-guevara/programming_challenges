@@ -2,6 +2,24 @@
 
 #include <byte_codec.hpp>
 
+template<size_t N>
+std::array<int32_t, N> decompose_in_base(delta_t number) {
+  std::array<int32_t, N> result {};
+  delta_t sign = (number < 0) ? -1 : 1;
+  number = std::abs(number);
+  for(auto& coef : result) {
+    coef = sign * (number % ALPHA_LEN);  
+    number /= ALPHA_LEN;
+  }
+  MY_ASSERT(!number);
+  return result;
+}
+
+template<class A>
+delta_t recompose(A a) { return a; }
+template<class A, class ... K>
+delta_t recompose(A a, K ... k) { return a + ALPHA_LEN * recompose(k...); }
+
 void byte_compress_numbers(const std::vector<delta_t>& input, std::vector<uint8_t>& output) {
   for(auto number : input) {
     if(number >= -byte_codec_lvl1() && number <= byte_codec_lvl1()) {
@@ -43,11 +61,6 @@ void byte_decompress_numbers(const std::vector<uint8_t>& input, std::vector<delt
   }
 }
 
-template<class A>
-delta_t recompose(A a) { return a; }
-template<class A, class ... K>
-delta_t recompose(A a, K ... k) { return a + ALPHA_LEN * recompose(k...); }
-
 delta_t byte_decode_small(const uint8_t* buffer) {
   int8_t a = (buffer[0] >> PREFIX_SMALL_LEN) - ALPHA_LEN;
   int8_t b = (buffer[1] & 0x7f) - ALPHA_LEN;
@@ -77,20 +90,8 @@ delta_t byte_decode_large(const uint8_t* buffer) {
   return *reinterpret_cast<const delta_t*>(buffer+1);
 }
 
-std::array<int32_t, 5> decompose_in_base(delta_t number) {
-  std::array<int32_t, 5> result {};
-  delta_t sign = (number < 0) ? -1 : 1;
-  number = std::abs(number);
-  for(auto& coef : result) {
-    coef = sign * (number % ALPHA_LEN);  
-    number /= ALPHA_LEN;
-  }
-  MY_ASSERT(!number);
-  return result;
-}
-
 void byte_encode_small(delta_t number, uint8_t* buffer) {
-  auto decomp = decompose_in_base(number);
+  auto decomp = decompose_in_base<DECOMP_BASE_LEN>(number);
   decomp[0] = (decomp[0] == 0 && number < 0)? -ALPHA_LEN : decomp[0];
   buffer[0] = ALPHA_LEN + decomp[0];
   buffer[0] = (buffer[0] << PREFIX_SMALL_LEN) | PREFIX_SMALL;
@@ -99,7 +100,7 @@ void byte_encode_small(delta_t number, uint8_t* buffer) {
 }
 
 void byte_encode_medium(delta_t number, uint8_t* buffer) {
-  auto decomp = decompose_in_base(number);
+  auto decomp = decompose_in_base<DECOMP_BASE_LEN>(number);
   decomp[0] = (decomp[0] == 0 && number < 0)? -ALPHA_LEN : decomp[0];
   auto& as_int = *reinterpret_cast<uint32_t*>(buffer);
   as_int = PREFIX_MEDIUM

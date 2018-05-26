@@ -16,6 +16,7 @@ enum class DFormat : uint16_t {
   NORMAL = 1,
   DELTA = 2,
   BYTE_COMP = 3,
+  BIT_COMP = 4,
 };
 
 enum class FFormat : uint16_t {
