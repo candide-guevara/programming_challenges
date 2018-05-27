@@ -52,11 +52,11 @@ std::unique_ptr<Series> read_series_from_file(std::string filepath) {
   return series;
 }
 
-std::unique_ptr<ProbDstrb> read_prob_dstrb_from_file(std::string filepath) {
+std::unique_ptr<ProbDstrb_t> read_prob_dstrb_from_file(std::string filepath) {
   auto fin = std::ifstream(filepath, std::ios::binary);
   MY_ASSERT(fin);
 
-  auto dstrb = std::make_unique<ProbDstrb>();
+  auto dstrb = std::make_unique<ProbDstrb_t>();
   dstrb->reserve(256);
   std::string line;
   std::regex line_rx("(.*),(.*),(.*)", std::regex::extended);
@@ -73,21 +73,31 @@ std::unique_ptr<ProbDstrb> read_prob_dstrb_from_file(std::string filepath) {
   return dstrb;
 }
 
-void dump_compressed_to_file(const Compressed& comp, std::string filename) {
+template<class T>
+void dump_compressed_to_file_internal(const Compressed& comp, std::string filename) {
   auto fout = std::ofstream(filename, std::ios::binary | std::ios::out);
   MY_ASSERT(fout);
-  FileHeader header = { FFormat::UNKNOWN, DFormat::BYTE_COMP, static_cast<uint32_t>(comp.count()) };
+  FileHeader header = { FFormat::UNKNOWN, comp.dformat, static_cast<uint32_t>(comp.count()) };
   fout.write(reinterpret_cast<const char*>(&header), sizeof(FileHeader));
   for(uint32_t i=0; i<comp.count(); ++i) {
     auto& meta = comp.meta[i];
     auto& data = comp.data[i];
-    fout.write(reinterpret_cast<const char*>(&meta), sizeof(SeriesMetadata));
+    fout.write(reinterpret_cast<const char*>(&meta), sizeof(T));
     fout.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(Compressed::data_type));
   }
   MY_ASSERT(fout);
 }
 
-std::string prob_to_string(const ProbDstrb& dstrb) {
+void dump_compressed_to_file(const Compressed& comp, std::string filename) {
+  if(comp.dformat == DFormat::BYTE_COMP)
+    dump_compressed_to_file_internal<SeriesMetadata>(comp, filename);
+  else if(comp.dformat == DFormat::BIT_COMP)
+    dump_compressed_to_file_internal<CompMetadata>(comp, filename);
+  else
+    MY_ASSERT(false);
+}
+
+std::string prob_to_string(const ProbDstrb_t& dstrb) {
   auto buf = std::stringstream{};
   for(auto [sym,cum,w] : dstrb)
     buf << sym << "," << cum << "," << w << std::endl;

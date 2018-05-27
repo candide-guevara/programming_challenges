@@ -30,10 +30,19 @@ struct FileHeader {
 };
 ASSERT_POD(FileHeader);
 
+#define MetaBaseFields \
+  uint64_t sid;        \
+  double min, max;     \
+  uint32_t start;      \
+
+struct CompMetadata {
+  MetaBaseFields
+};
+ASSERT_POD(CompMetadata);
+
 struct SeriesMetadata {
-  uint64_t sid;
-  double min, max;
-  uint32_t start, count;
+  MetaBaseFields
+  uint32_t count;
 };
 ASSERT_POD(SeriesMetadata);
 
@@ -61,13 +70,13 @@ using ProbTuple = std::tuple<symb_t, prob_t, prob_t>;
 inline symb_t symbol(const ProbTuple& t) { return std::get<0>(t); }
 inline prob_t cumsum(const ProbTuple& t) { return std::get<1>(t); }
 inline prob_t weight(const ProbTuple& t) { return std::get<2>(t); }
-using ProbDstrb = std::vector<ProbTuple>;
+using ProbDstrb_t = std::vector<ProbTuple>;
 
 std::unique_ptr<Series> read_series_from_file(std::string filepath);
-std::unique_ptr<ProbDstrb> read_prob_dstrb_from_file(std::string filepath);
+std::unique_ptr<ProbDstrb_t> read_prob_dstrb_from_file(std::string filepath);
 void dump_compressed_to_file(const Compressed& comp, std::string filename);
 
-std::string prob_to_string(const ProbDstrb& dstrb);
+std::string prob_to_string(const ProbDstrb_t& dstrb);
 std::string seriesmeta_to_string(const SeriesMetadata& meta);
 std::string series_to_string(const Series& series);
 
