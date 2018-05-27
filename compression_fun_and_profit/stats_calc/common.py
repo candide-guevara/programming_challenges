@@ -5,6 +5,7 @@ MAX_PRICE_RATIO = 10**6
 MAX_ABS_PRICE   = 10**8
 MIN_SCALE       = 40_000
 MIN_DATAPOINTS  = 50
+MAX_ALPHA_EXP   = 4
 END_MARK        = None
 
 class DFormat:
@@ -18,8 +19,10 @@ def my_open(config, filepath, mode):
     return gzip.open(filepath, mode)
   return open(filepath, mode)
 
-def tmp_stage_name(config):
-  return os.path.join(config.stage_dir, str(uuid.uuid1()))
+def tmp_stage_name(config, name=None):
+  if not name:
+    return os.path.join(config.stage_dir, str(uuid.uuid1()))
+  return os.path.join(config.stage_dir, name)
 
 def int_to_date(int_date):
   return datetime.date(year  = int_date // 10000,
@@ -53,14 +56,10 @@ def parse_args (help_msg):
   parser = argparse.ArgumentParser(help_msg)
   parser.add_argument ('--stage-dir', '-s', 
                         help='Directory for staging temp result files',
-                        default='/tmp')
-  parser.add_argument ('--raw-input', '-i', 
-                        help='Gzipped file containing input dataframes')
+                        default='/tmp/compression_fun_and_profit')
   parser.add_argument ('--col-name', '-c', 
                         help='The name of the series to process',
                         default='$CHIST')
-  parser.add_argument ('--prob-output', '-p', 
-                        help='Output file containing the probability distribution')
   parser.add_argument ('--use-gzip',
                         help='Use gzip to store results in staging (can make the program core)',
                         action='store_true',

@@ -106,44 +106,44 @@ class SeriesStats:
     irreg_dstrb = []
     for val,w in sorted(buckets.items()):
       cumsum += w
-      irreg_dstrb.append((val, cumsum, w))
+      irreg_dstrb.append((val, cumsum))
     irreg_dstrb = self.aggregate_head_tail(config, irreg_dstrb)
     cumsum += count_series
-    irreg_dstrb.append((END_MARK, cumsum, count_series))
+    irreg_dstrb.append((END_MARK, cumsum))
 
     max_prob = 2 ** config.int_len
     scale = max_prob / cumsum
     #logger.debug('scale=%r, max_ratio=%r', scale, max( t[2] for t in irreg_dstrb )/cumsum)
-    prob_dstrb = [ (v, int(scale*c), int(scale*w)) for v,c,w in irreg_dstrb ]
-    prob_dstrb[-1] = (prob_dstrb[-1][0], max_prob, prob_dstrb[-1][2])
+    prob_dstrb = [ (v, int(scale*c)) for v,c in irreg_dstrb ]
+    prob_dstrb[-1] = (prob_dstrb[-1][0], max_prob)
+
+    last_cum = 0
+    for i in range(len(prob_dstrb)):
+      tup = prob_dstrb[i]
+      prob_dstrb[i] = (tup[0], tup[1], tup[1] - last_cum)
+      last_cum = tup[1]
     return prob_dstrb
 
   def aggregate_head_tail(self, config, dstrb):
-    min_w, max_w, extra_w_min, extra_w_max = 0,0,0,0
-    cutoff_val = config.alphabet_len ** 4
+    last_cum, extra_w_min, extra_w_max = 0,0,0
+    cutoff_val = self.alphabet_len ** MAX_ALPHA_EXP
     new_dstrb= {}
 
-    for val,cum,w in dstrb:
+    for val,cum in dstrb:
+      w = cum - last_cum
+      last_cum = cum
       if val <= -cutoff_val:
         extra_w_min += w * (val//-cutoff_val - 1)
-        min_w += w 
-        new_dstrb[-cutoff_val] = [-cutoff_val, cum, min_w]
-      elif val >= cutoff_val:
-        extra_w_max += w * (val//cutoff_val - 1)
-        max_w += w 
-        new_dstrb[cutoff_val] = [cutoff_val, cum, max_w]
-      else:
-        new_dstrb[val] = [val,cum,w]
+      elif val > cutoff_val:
+        extra_w_max += w * (val//cutoff_val)
 
     assert extra_w_min >= 0 and extra_w_max >= 0
-    for l in new_dstrb.values():
-      l[1] += extra_w_min
-    if -cutoff_val in new_dstrb:
-      new_dstrb[-cutoff_val][2] += extra_w_min
+    for val,cum in dstrb:
+      if val <= cutoff_val and val >= -cutoff_val:
+        new_dstrb[val] = (val, cum + extra_w_min)
     if cutoff_val in new_dstrb:
-      new_dstrb[cutoff_val][1] += extra_w_max
-      new_dstrb[cutoff_val][2] += extra_w_max
-    return [ tuple(v) for k,v in sorted(new_dstrb.items()) ]
+      new_dstrb[cutoff_val] = (cutoff_val, new_dstrb[cutoff_val][1] + extra_w_max)
+    return [ v for k,v in sorted(new_dstrb.items()) ]
 
   def __repr__(self):
     return "entropy=%r, \nfull=%r, \nnorm=%r, \ndstrb=%r" \
