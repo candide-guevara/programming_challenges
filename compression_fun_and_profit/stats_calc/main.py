@@ -35,6 +35,7 @@ def dump_test_series(config):
   logger.info('gaussian series 0=%r, stats=%r', series_out, stats_out)
 
   series = series_io.build_gaussian_series(config, 666, 10000, 3, 2000)
+  stats = series_stats_calc.calc_stats_from_delta_series(config, series)
   series_out, stats_out = tmp_stage_name(config, 'gaussian_series_mu_666.bin'), tmp_stage_name(config, 'gaussian_series_mu_666.prob')
   series_io.dump_as_np_series(config, series_out, series)
   series_io.dump_prob_distribution(config, stats_out, stats)

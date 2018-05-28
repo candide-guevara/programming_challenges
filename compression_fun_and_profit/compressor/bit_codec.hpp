@@ -4,6 +4,7 @@
 #include <common.hpp>
 #include <series_io.hpp>
 
+using Decomp_t = std::array<int32_t, PROB_BASE_LEN+1>;
 using SymbTable_t = std::unordered_map<symb_t, std::pair<prob_t,size_t>>;
 using SymbRank_t = std::unordered_map<symb_t, size_t>;
 using CumSum_t = std::vector<prob_t>;
@@ -16,6 +17,8 @@ struct BitWriter {
 
   BitWriter();
   void write_bit(uint8_t bit);
+  void skip_to_next_byte();
+  std::string buffer_to_str();
 };
 
 struct BitReader {
@@ -23,7 +26,7 @@ struct BitReader {
   size_t read_pos;
 
   void load_data(const uint8_t *start);
-  uint8_t read_bit();
+  uint64_t read_bit();
 };
 
 struct BitEncoder {
@@ -52,12 +55,12 @@ struct BitDecoder {
   void build_idx_to_symb(const ProbDstrb_t& prob);
   void build_symb_to_rank(const ProbDstrb_t& prob);
 
-  void load_data(const uint8_t* start);
+  void load_data_and_prime_carry(const uint8_t* start);
   delta_t read_number();
   symb_t read_symbol();
 };
 
-std::array<int32_t, PROB_BASE_LEN+1> decompose_and_collapse_tails(delta_t number);
+Decomp_t decompose_and_collapse_tails(delta_t number);
 std::unique_ptr<Compressed> bit_compress_from_delta(const Series& input, const ProbDstrb_t& prob);
 std::unique_ptr<Series> delta_from_bit_compress(const Compressed& input, const ProbDstrb_t& prob);
 

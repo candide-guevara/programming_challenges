@@ -30,10 +30,20 @@ inline void test_byte_codec() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+void test_decompose_and_collapse_tails();
+void test_bit_encoder_write_coef_gaussian();
+void test_bit_encoder_write_coef_ordered();
 void test_synthetic_series_bit_codec();
 void test_real_series_bit_codec();
+void test_bit_codec_coef_from(const char* dstrb_name);
 inline void test_bit_codec() {
   LOG("--- start suite ---");
+  test_decompose_and_collapse_tails();
+  test_bit_encoder_write_coef_gaussian();
+  test_bit_encoder_write_coef_ordered();
+  test_bit_codec_coef_from("ordered_series.prob");
+  test_bit_codec_coef_from("gaussian_series_mu_0.prob");
+  test_bit_codec_coef_from("gaussian_series_mu_666.prob");
   test_synthetic_series_bit_codec();
   test_real_series_bit_codec();
 }
@@ -42,8 +52,8 @@ inline void test_bit_codec() {
 
 inline void test_all() {
   LOG("### start all ###");
-  test_series_io();
-  test_byte_codec();
+  //test_series_io();
+  //test_byte_codec();
   test_bit_codec();
   LOG("### end all ###");
 }
@@ -51,6 +61,8 @@ inline void test_all() {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool operator ==(const SeriesMetadata&lhs, const SeriesMetadata&rhs);
+bool is_in_dstrb(const ProbDstrb_t& dstrb, symb_t symb);
+ProbDstrb_t sample_from_prob_dstrb(const ProbDstrb_t& dstrb, const std::vector<symb_t>& symbs);
 
 template<class S>
 bool compare_series(const S& lhs, const S& rhs) {

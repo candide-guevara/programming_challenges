@@ -76,7 +76,7 @@ std::unique_ptr<Series> read_series_from_file(std::string filepath);
 std::unique_ptr<ProbDstrb_t> read_prob_dstrb_from_file(std::string filepath);
 void dump_compressed_to_file(const Compressed& comp, std::string filename);
 
-std::string prob_to_string(const ProbDstrb_t& dstrb);
+std::string prob_to_string(const ProbDstrb_t& dstrb, bool hex=false);
 std::string seriesmeta_to_string(const SeriesMetadata& meta);
 std::string series_to_string(const Series& series);
 

@@ -1,36 +1,56 @@
 #include <algorithm>
+#include <iterator>
+#include <sstream>
+
 #include <bit_codec.hpp>
 
 BitWriter::BitWriter() {
-  write_pos = 0;
+  write_pos = 8;
   buffer.reserve(INIT_LEN);
+  buffer.push_back(0);
 }
 
 void BitWriter::write_bit(uint8_t bit) {
-  auto bit_pos = write_pos % 8;
-  if(!bit_pos)
-    buffer.push_back(0);
   auto& back = buffer.back();
-  back |= ((bit & 1) << bit_pos);
-  ++write_pos;
+  back |= ((bit & 1) << --write_pos);
+  if(write_pos == 0) {
+    buffer.push_back(0);
+    write_pos = 8;
+  }
+}
+
+void BitWriter::skip_to_next_byte() {
+  buffer.push_back(0);
+  write_pos = 8;
+}
+
+std::string BitWriter::buffer_to_str() {
+  auto buf = std::stringstream{};
+  buf << std::hex << "[ ";
+  std::ostream_iterator<uint32_t> out_it(buf, ", ");
+  std::copy(RANGE(buffer), out_it);
+  buf << " ]";
+  return buf.str();
 }
 
 void BitReader::load_data(const uint8_t* start) {
   MY_ASSERT(start);
-  read_pos = 0;
+  read_pos = 8;
   buffer = start;
 }
 
-uint8_t BitReader::read_bit() {
-  auto result = ((*buffer >> read_pos) & 1);
-  buffer += ++read_pos / 8;
-  read_pos = read_pos % 8;
+uint64_t BitReader::read_bit() {
+  auto result = ((*buffer >> --read_pos) & 1);
+  if(read_pos == 0) {
+    buffer += 1;
+    read_pos = 8;
+  }
   return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::array<int32_t, PROB_BASE_LEN+1> decompose_and_collapse_tails(delta_t number) {
+Decomp_t decompose_and_collapse_tails(delta_t number) {
   std::array<int32_t, PROB_BASE_LEN+1> result {};
   delta_t sign = (number < 0) ? -1 : 1;
   number = std::abs(number);
@@ -63,15 +83,25 @@ void BitEncoder::build_symbol_table(const ProbDstrb_t& prob) {
 }
 
 SymbTable_t::mapped_type BitEncoder::encoding_for_range(prob_t min, prob_t max) {
-  auto bit_msk = LAST_PROB_DIGIT_MASK;
   prob_t base = 0;
   size_t shift = 0;
-  for(; ((min ^ max) & bit_msk) == 0; bit_msk >>= 1, ++shift) {
+
+  for(auto bit_msk = MAX_PROB_HIGH_BIT; ((min ^ max) & bit_msk) == 0 && bit_msk;) {
     prob_t next = (min & bit_msk) ? 1 : 0;
     base = ((base << 1) | next); 
+    bit_msk >>= 1;
+    shift += 1;
   }
-  auto result = SymbTable_t::mapped_type{base << 1, ++shift};
-  MY_ASSERT(bit_msk && result.first < MAX_PROB && result.second < MAX_PROB_EXP);
+  base <<= 1;
+  shift += 1;
+  for(size_t unshift=MAX_PROB_EXP-shift; (base << unshift) < min;) {
+    base = ((base << 1) | 1);
+    unshift -= 1;
+    shift += 1;
+  }
+
+  auto result = SymbTable_t::mapped_type{base, shift};
+  MY_ASSERT(result.first < MAX_PROB && result.second < MAX_PROB_EXP);
   return result;
 }
 
@@ -115,10 +145,10 @@ BitDecoder::BitDecoder(const ProbDstrb_t& prob) {
   build_symb_to_rank(prob);
 }
 
-void BitDecoder::load_data(const uint8_t* start) {
+void BitDecoder::load_data_and_prime_carry(const uint8_t* start) {
   // we prime the carry
-  carry = read_symbol();
   buffer.load_data(start);
+  carry = read_symbol();
 }
 
 void BitDecoder::build_symb_to_rank(const ProbDstrb_t& prob) {
@@ -126,7 +156,7 @@ void BitDecoder::build_symb_to_rank(const ProbDstrb_t& prob) {
   symb_to_rank.reserve(prob.size() * 2);
   auto out_it = std::inserter(symb_to_rank, symb_to_rank.end());
   std::transform(RANGE(prob), out_it, [](auto& t) { 
-    auto symb = std::get<0>(t); 
+    auto symb = std::abs(std::get<0>(t)); 
     SymbRank_t::mapped_type rank = 0;
     while(symb /= ALPHA_LEN) ++rank;
     MY_ASSERT(rank <= PROB_BASE_LEN);
@@ -148,7 +178,7 @@ void BitDecoder::build_cumsum(const ProbDstrb_t& prob) {
   cumsum.reserve(prob.size());
   auto out_it = std::back_inserter(cumsum);
   std::transform(RANGE(prob), out_it, [](auto& t) { return std::get<1>(t); });
-  MY_ASSERT(cumsum.size() == prob.size());
+  MY_ASSERT(cumsum.size() == prob.size() && cumsum.back() == MAX_PROB);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -176,14 +206,14 @@ symb_t BitDecoder::read_symbol() {
   uint32_t bit_pos = MAX_PROB_EXP;
   prob_t min = 0, max = 0;
 
-  while(std::distance(it_start, it_end) > 1) {
+  while(std::distance(it_start, it_end)) {
     min |= (buffer.read_bit() << --bit_pos);
     max = min | ((1llu << bit_pos) - 1llu);
     it_start = std::lower_bound(it_start, it_end, min);
     it_end = std::upper_bound(it_start, it_end, max);
   }
 
-  MY_ASSERT(it_start != it_end && bit_pos && it_start != cumsum.end());
+  MY_ASSERT(bit_pos && it_start != cumsum.end());
   auto result = idx_to_symb.at(std::distance(cumsum.begin(), it_start));
   return result;
 }
@@ -216,7 +246,7 @@ std::unique_ptr<Series> delta_from_bit_compress(const Compressed& input, const P
 
     meta = input.meta[i];
     data.reserve(INIT_LEN);
-    decoder.load_data(input.data[i].data());
+    decoder.load_data_and_prime_carry(input.data[i].data());
 
     for(auto number = decoder.read_number(); 
         number != END_MARKER; 

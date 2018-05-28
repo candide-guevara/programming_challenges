@@ -111,7 +111,7 @@ class SeriesStats:
     cumsum += count_series
     irreg_dstrb.append((END_MARK, cumsum))
 
-    max_prob = 2 ** config.int_len
+    max_prob = 2 ** config.int_len - 1
     scale = max_prob / cumsum
     #logger.debug('scale=%r, max_ratio=%r', scale, max( t[2] for t in irreg_dstrb )/cumsum)
     prob_dstrb = [ (v, int(scale*c)) for v,c in irreg_dstrb ]

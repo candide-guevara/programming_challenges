@@ -97,8 +97,9 @@ void dump_compressed_to_file(const Compressed& comp, std::string filename) {
     MY_ASSERT(false);
 }
 
-std::string prob_to_string(const ProbDstrb_t& dstrb) {
+std::string prob_to_string(const ProbDstrb_t& dstrb, bool hex) {
   auto buf = std::stringstream{};
+  if(hex) buf << std::hex;
   for(auto [sym,cum,w] : dstrb)
     buf << sym << "," << cum << "," << w << std::endl;
   return buf.str();
