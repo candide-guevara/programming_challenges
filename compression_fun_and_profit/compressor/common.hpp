@@ -5,12 +5,16 @@
 #include <cstdlib>
 
 #ifdef NDEBUG
-#define MY_ASSERT(x) do { (void)sizeof(x); } while (0)
+#define MY_ASSERT(x) do { const bool __b__ = false && (x); (void)sizeof(__b__); } while (0)
+#define TEST_ASSERT(exp)                                                                                               \
+  if (!(exp)) {                                                                                                        \
+    LOG("TEST_ASSERT : " #exp);                                                                                        \
+    throw std::runtime_error("test_failed");                                                                           \
+  }
 #else
 #define MY_ASSERT(x) assert(x)
-#endif
-
 #define TEST_ASSERT(x) assert(x)
+#endif
 
 #define LOG(msg) std::cerr << __PRETTY_FUNCTION__ << "[" << __LINE__ << "] " << msg << std::endl
 

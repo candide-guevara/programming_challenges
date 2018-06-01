@@ -159,37 +159,73 @@ void test_bit_codec_coef_from(const char* dstrb_name) {
 
   for(auto exp_symb : inputs) {
     auto dec_symb = decoder.read_symbol();
-    LOG("exp_symb=" << exp_symb << " / " << "dec_symb=" << dec_symb);
+    //LOG("exp_symb=" << exp_symb << " / " << "dec_symb=" << dec_symb);
     TEST_ASSERT(exp_symb == dec_symb);
   }
 }
 
-void test_synthetic_series_bit_codec() {
-  LOG("start");
-  /*std::unique_ptr<Series> input[6] = {};
-  input[0] = read_series_from_file("ordered_series.bin");
-  input[1] = negate_series(*input[0]);
-  input[2] = read_series_from_file("gaussian_series_mu_0.bin");
-  input[3] = negate_series(*input[2]);
-  input[4] = read_series_from_file("gaussian_series_mu_666.bin");
-  input[5] = negate_series(*input[4]);
-  for(const auto& series : input) {
-    auto compressed = bit_compress_from_delta(*series);
-    auto series2 = delta_from_bit_compress(*compressed);
-    TEST_ASSERT(compare_series(*series, *series2));
-  }*/
+void test_bit_codec_number_from(const char* dstrb_name) {
+  LOG("start : " << dstrb_name);
+  auto dstrb = read_prob_dstrb_from_file(dstrb_name);
+  BitEncoder encoder(*dstrb);
+  BitDecoder decoder(*dstrb);
+
+  // cannot have numbers > A_POW(2)
+  //std::vector<delta_t> inputs = { 1, 1+ALPHA_LEN, 11+3*ALPHA_LEN, 2*ALPHA_LEN, 0, ALPHA_LEN, };
+  std::vector<symb_t> inputs;
+  for(symb_t symb = 0; symb < (symb_t)ALPHA_LEN; ++symb) {
+    if(is_in_dstrb(*dstrb, symb)) inputs.push_back(symb);
+    if(is_in_dstrb(*dstrb, symb + symb*ALPHA_LEN)) inputs.push_back(symb+symb*ALPHA_LEN);
+    if(is_in_dstrb(*dstrb, -symb)) inputs.push_back(-symb);
+    if(is_in_dstrb(*dstrb, -symb - symb*ALPHA_LEN)) inputs.push_back(-symb-symb*ALPHA_LEN);
+  }
+
+  for(auto number : inputs)
+    encoder.write_number(number);
+  encoder.write_end_marker();
+
+  auto& encoded = encoder.buffer.buffer;
+  decoder.load_data_and_prime_carry(encoded.data());
+
+  for(auto exp_num : inputs) {
+    auto dec_num = decoder.read_number();
+    //LOG("exp_num=" << exp_num << " / " << "dec_num=" << dec_num);
+    TEST_ASSERT(exp_num == dec_num);
+  }
 }
 
-void test_real_series_bit_codec() {
-  LOG("start");
-  /*std::unique_ptr<Series> input[1] = {};
-  input[0] = read_series_from_file("secout_bics_1_tech.bin");
-  input[1] = read_series_from_file("secout_xchng_us.bin");
-  for(const auto& series : input) {
-    auto compressed = bit_compress_from_delta(*series);
-    auto series2 = delta_from_bit_compress(*compressed);
+void test_bit_codec_endmarker_from(const char* dstrb_name) {
+  LOG("start : " << dstrb_name);
+  auto dstrb = read_prob_dstrb_from_file(dstrb_name);
+  BitEncoder encoder(*dstrb);
+  BitDecoder decoder(*dstrb);
+
+  std::vector<delta_t> inputs = { 1, 1, 1};
+  for(auto number : inputs)
+    encoder.write_number(number);
+  encoder.write_end_marker();
+
+  auto& encoded = encoder.buffer.buffer;
+  decoder.load_data_and_prime_carry(encoded.data());
+
+  for(size_t i=0; i<inputs.size(); ++i)
+    decoder.read_number();
+
+  TEST_ASSERT(decoder.read_number() == END_MARKER);
+  TEST_ASSERT(decoder.read_number() == END_MARKER);
+}
+
+void test_all_series_bit_codec() {
+  std::vector<std::string> names = { "gaussian_series_mu_0", "gaussian_series_mu_666", "ordered_series", "secout_bics_1_tech", "secout_xchng_us" };
+
+  for(const auto& name : names) {
+    LOG("start : " << name);
+    auto series = read_series_from_file(name + ".bin"); 
+    auto dstrb = read_prob_dstrb_from_file(name + ".prob");
+    auto compressed = bit_compress_from_delta(*series, *dstrb);
+    auto series2 = delta_from_bit_compress(*compressed, *dstrb);
     TEST_ASSERT(compare_series(*series, *series2));
-  }*/
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -208,11 +208,17 @@ class TestStatCalculator (ut.TestCase):
 
   #@ut.skip('')
   def test_stat_calc_on_sample(self):
+    max_prob = 2 ** self.config.int_len - 1
     series = series_io.load_from_df_chunks(CHIST_RAW_FILES[0], CHIST_COL)
     series = series_transform.normalize_series(self.config, series)
     series = series_transform.normal_to_delta_series(self.config, series)
     stats = series_stats_calc.calc_stats_from_delta_series(self.config, series)
-    logger.info("result=\n%r", stats)
+    #logger.info("result=\n%r", stats.prob_dstrb)
+    self.assertTrue(stats.prob_dstrb[0][1] < max_prob)
+    self.assertEqual(stats.prob_dstrb[0][2], stats.prob_dstrb[0][1])
+    self.assertEqual(stats.prob_dstrb[-1][1], max_prob)
+    self.assertTrue(all( cum > 0 and cum <= max_prob for sym,cum,dlt in stats.prob_dstrb ))
+    self.assertTrue(all( dlt > 0 and dlt <= max_prob and dlt <= cum for sym,cum,dlt in stats.prob_dstrb ))
     self.assertTrue(self.percentiles_ok(stats.full_histo.perc))
     self.assertTrue(self.percentiles_ok(stats.norm_histo.perc))
 

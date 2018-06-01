@@ -108,7 +108,7 @@ class SeriesStats:
       cumsum += w
       irreg_dstrb.append((val, cumsum))
     irreg_dstrb = self.aggregate_head_tail(config, irreg_dstrb)
-    cumsum += count_series
+    cumsum = count_series + irreg_dstrb[-1][1]
     irreg_dstrb.append((END_MARK, cumsum))
 
     max_prob = 2 ** config.int_len - 1

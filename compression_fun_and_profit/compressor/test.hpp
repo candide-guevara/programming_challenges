@@ -33,9 +33,10 @@ inline void test_byte_codec() {
 void test_decompose_and_collapse_tails();
 void test_bit_encoder_write_coef_gaussian();
 void test_bit_encoder_write_coef_ordered();
-void test_synthetic_series_bit_codec();
-void test_real_series_bit_codec();
 void test_bit_codec_coef_from(const char* dstrb_name);
+void test_bit_codec_number_from(const char* dstrb_name);
+void test_bit_codec_endmarker_from(const char* dstrb_name);
+void test_all_series_bit_codec();
 inline void test_bit_codec() {
   LOG("--- start suite ---");
   test_decompose_and_collapse_tails();
@@ -44,8 +45,11 @@ inline void test_bit_codec() {
   test_bit_codec_coef_from("ordered_series.prob");
   test_bit_codec_coef_from("gaussian_series_mu_0.prob");
   test_bit_codec_coef_from("gaussian_series_mu_666.prob");
-  test_synthetic_series_bit_codec();
-  test_real_series_bit_codec();
+  test_bit_codec_number_from("ordered_series.prob"); 
+  test_bit_codec_number_from("gaussian_series_mu_0.prob");
+  test_bit_codec_number_from("gaussian_series_mu_666.prob");
+  test_bit_codec_endmarker_from("ordered_series.prob"); 
+  test_all_series_bit_codec();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

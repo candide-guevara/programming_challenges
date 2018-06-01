@@ -176,9 +176,10 @@ def build_ordered_series(config, count_series, count_dates):
   dtype = intlen_to_nptype(config)
   for i in range(count_series):
     meta = SerieMetadata()
-    meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, count_dates-1, count_dates
+    meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, count_dates-1, count_dates+1
     data = np.arange(count_dates, dtype=dtype)
-    data = np.ma.masked_array(data, data == np.nan)
+    data = np.append(data, [0], dtype=dtype)
+    data = np.ma.masked_array(data, data == np.nan, dtype=dtype)
     #logger.debug("%r, %r", data.mean(), data.base)
     series.add(meta, data)
   return series
@@ -191,6 +192,9 @@ def build_gaussian_series(config, mu, sig, count_series, count_dates):
     meta = SerieMetadata()
     meta.sid, meta.start, meta.min, meta.max, meta.count = i, start, 0, 1000, count_dates
     data = sig * np.random.randn(count_dates) + mu
+    if sig: 
+      data = np.append(data, [0] * (count_dates//20 + 1))
+      meta.count += (count_dates//20 + 1)
     data = np.ma.masked_array(data, data == np.nan, dtype=dtype)
     #logger.debug("%r, %r", data.mean(), data.base)
     series.add(meta, data)

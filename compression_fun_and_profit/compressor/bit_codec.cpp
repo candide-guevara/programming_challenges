@@ -116,10 +116,12 @@ void BitEncoder::write_number(delta_t number) {
   auto decomp = decompose_and_collapse_tails(number);
   symb_t exp = 1;
   for(auto coef : decomp) {
-    if(coef || exp == 1)
+    // every number will start with a coef in [-ALPHA_LEN+1, ALPHA_LEN-1]
+    // but other null coef will be omitted
+    if(coef && exp == MAX_SYMB) 
+      write_coef(number < 0 ? -MAX_SYMB : MAX_SYMB, std::abs(coef));
+    else if(coef || exp == 1)
       write_coef(coef * exp, 1);
-    else if(coef && exp == MAX_SYMB) 
-      write_coef(MAX_SYMB, coef);
     exp *= ALPHA_LEN;
   }
 }
@@ -130,9 +132,10 @@ void BitEncoder::write_end_marker() {
 
 void BitEncoder::write_coef(symb_t coef, size_t times) {
   auto [base, shift] = symb_tab.at(coef);
-  while(times--) {
+  MY_ASSERT(times < MAX_SYMB);
+  while(times-- > 0) {
     auto tmp_shift = shift;
-    while(tmp_shift--)
+    while(tmp_shift-- > 0)
       buffer.write_bit((base >> tmp_shift) & 1); 
   }
 }
