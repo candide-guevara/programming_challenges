@@ -216,7 +216,9 @@ void test_bit_codec_endmarker_from(const char* dstrb_name) {
 }
 
 void test_all_series_bit_codec() {
-  std::vector<std::string> names = { "gaussian_series_mu_0", "gaussian_series_mu_666", "ordered_series", "secout_bics_1_tech", "secout_xchng_us" };
+  std::vector<std::string> names = { "gaussian_series_mu_0", "gaussian_series_mu_666", "ordered_series", 
+    //"secout_bics_1_tech", "secout_xchng_us",
+  };
 
   for(const auto& name : names) {
     LOG("start : " << name);

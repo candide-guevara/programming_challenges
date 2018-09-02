@@ -10,8 +10,8 @@ CC       := g++
 CPPFLAGS := 
 opt: CPPFLAGS := $(CPPFLAGS) -DNDEBUG
 dbg: CPPFLAGS := $(CPPFLAGS) 
-CFLAGS   := -std=c++17 -Wall -Werror -I $(CPP_DIR)
-opt: CFLAGS := $(CFLAGS) -mtune=native -march=native -O3
+CFLAGS   := -std=c++17 -fmax-errors=5 -Wall -Werror -I $(CPP_DIR)
+opt: CFLAGS := $(CFLAGS) -mtune=native -march=native -O3 -fno-plt
 dbg: CFLAGS := $(CFLAGS) -ggdb -O0
 LDFLAGS  :=
 LDLIBS   :=
@@ -40,11 +40,11 @@ python_calc: py_prep
 opt: $(BIN_DIR) $(BIN_DIR)/compressor_opt
 dbg: $(BIN_DIR) $(BIN_DIR)/compressor_dbg
 
-compressor_test: dbg
+compressor_test: opt
 	cp etc/*.prob $(BIN_DIR)
 	cp etc/*.bin $(BIN_DIR)
 	pushd $(BIN_DIR)
-	./compressor_dbg	
+	./compressor_opt
 
 $(BIN_DIR)/compressor_dbg: $(wildcard $(CPP_DIR)/*)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(filter %.cpp,$^)
