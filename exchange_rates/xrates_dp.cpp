@@ -1,6 +1,7 @@
 #include <xrates_dp.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cassert>
 #include <iostream>
 
 #include <boost/format.hpp>
@@ -18,7 +19,25 @@ namespace xrate {
     return currencies;
   }
 
-  auto build_missing_it(const Matrix& rates, const vector<string_view>& currencies) {
+  CurCell combine(CurCell lhs, CurCell rhs) {
+    return {lhs.first*rhs.first, lhs.second+rhs.second};
+  }
+
+  CurCell backward(CurCell lhs) {
+    //return {isnan(lhs.first) ? NAN : (1/lhs.first), lhs.second+1};
+    return {1/lhs.first, lhs.second+1};
+  }
+
+  bool isbetter(CurCell current, CurCell candidate) {
+    return !isnan(candidate.first) 
+           && (isnan(current.first) || candidate.second < current.second);
+  }
+
+  bool isbest(CurCell lhs) {
+    return (!isnan(lhs.first) && lhs.second <= 3);
+  }
+
+  auto build_cell_it(const Matrix& rates, const vector<string_view>& currencies) {
     auto it = [
         &currencies, 
         &rates,
@@ -29,7 +48,7 @@ namespace xrate {
         for(; c2_it < len;) {
           auto& c1 = currencies[c1_it];
           auto& c2 = currencies[c2_it++];
-          if (c1 != c2 && isnan(rates.at(c1).at(c2)))
+          if (c1 != c2)
             return make_pair(c1,c2);
         }
       return CurPair("", "");
@@ -38,16 +57,16 @@ namespace xrate {
   }
 
   void patch_backpaths(Matrix& rates, const vector<string_view>& currencies) {
-    auto iterator_over_missing = build_missing_it(rates, currencies);
+    auto iterator_over_cells = build_cell_it(rates, currencies);
 
-    for(auto pcurr = iterator_over_missing();
+    for(auto pcurr = iterator_over_cells();
         pcurr.first.size();
-        pcurr = iterator_over_missing()) {
+        pcurr = iterator_over_cells()) {
       auto from = pcurr.first;
       auto to = pcurr.second;
-      auto inverse = rates[to][from];
-      //if (!isnan(inverse))
-        rates[from][to] = 1 / inverse;
+      auto irate = backward(rates[to][from]);
+      auto& rate = rates[from][to];
+      if(isbetter(rate, irate)) rate = irate;
     }
   }
 
@@ -66,63 +85,73 @@ namespace xrate {
     return it;
   }
 
-  double find_shortest_helper(Matrix& rates, span<string_view>& rolling_span, string_view from, string_view to) {
+  void roll_restore_order(span<std::string_view>& span, size_t idx) {
+    if (idx < span.len) swap(span[0], span[idx]);
+  }
+
+  CurCell find_shortest_helper(Matrix& rates, span<string_view>& rolling_span, string_view from, string_view to) {
     count_1++;
     auto& final_rate = rates[from][to];
 
-    if (from != to && isnan(final_rate) && rolling_span.len) {
-      count_2++;
+    if (from != to && !isbest(final_rate) && rolling_span.len) {
       auto roll_it = roll_span(rolling_span);
       auto& inverse = rates[to][from];
 
       for(auto idx_span = roll_it();
           idx_span.first < rolling_span.len;
           idx_span = roll_it() ) {
-        auto cur = rolling_span[idx_span.first];
-        auto rate = find_shortest_helper(rates, idx_span.second, from, cur)
-                    * find_shortest_helper(rates, idx_span.second, cur, to);
-        if(!isnan(rate))
+        count_2++;
+        auto cur = rolling_span[0];
+        auto rate = combine(
+          find_shortest_helper(rates, idx_span.second, from, cur),
+          find_shortest_helper(rates, idx_span.second, cur, to));
+        auto irate = backward(rate);
+        if(isbetter(final_rate, rate))
           final_rate = rate;
-        if(isnan(inverse))
-          inverse = 1/rate;
+        if(isbetter(inverse, irate))
+          inverse = irate;
       }
     }
     return final_rate;
   }
 
   void find_shortest(Matrix& rates, vector<string_view> currencies, string_view from, string_view to) {
+    assert(from != to);
+    auto& final_rate = rates[from][to];
+    auto& inverse = rates[to][from];
+
     auto rolling_span = span<string_view>::from_vector(currencies);
     auto roll_it = roll_span(rolling_span);
 
     for(auto idx_span = roll_it();
         idx_span.first < rolling_span.len;
         idx_span = roll_it() ) {
-      auto cur = rolling_span[idx_span.first];
-      auto rate = find_shortest_helper(rates, idx_span.second, from, cur)
-                  * find_shortest_helper(rates, idx_span.second, cur, to);
-      auto& inverse = rates[to][from];
-      if(!isnan(rate))
-        rates[from][to] = rate;
-      if(isnan(inverse))
-        inverse = 1/rate;
+      auto cur = rolling_span[0];
+      auto rate = combine(
+        find_shortest_helper(rates, idx_span.second, from, cur),
+        find_shortest_helper(rates, idx_span.second, cur, to));
+      auto irate = backward(rate);
+      if(isbetter(final_rate, rate))
+        final_rate = rate;
+      if(isbetter(inverse, irate))
+        inverse = irate;
     }
   }
 
   void all_pairs_shortest(Matrix& rates) {
     auto currencies = build_currency_list(rates);
-    auto iterator_over_missing = build_missing_it(rates, currencies);
+    auto iterator_over_cells = build_cell_it(rates, currencies);
 
     patch_backpaths(rates, currencies);
-    //print_exchange_matrix(rates);
+    print_exchange_matrix(rates);
 
-    for(auto pcurr = iterator_over_missing();
+    for(auto pcurr = iterator_over_cells();
         pcurr.first.size();
-        pcurr = iterator_over_missing()) {
+        pcurr = iterator_over_cells()) {
       auto from = pcurr.first;
       auto to = pcurr.second;
       find_shortest(rates, currencies, from, to);
     }
-    return;
   }
 
   void print_exchange_matrix(const Matrix& rates) {
@@ -131,7 +160,7 @@ namespace xrate {
 
     cout << "      ";
     for(auto from : currencies) {
-      cout << from << "  ";
+      cout << from << "    ";
     }
     cout << endl;
     //for(auto& [from,row] : rates) {
@@ -141,9 +170,9 @@ namespace xrate {
       //for(auto [to,cell] : row) {
       for(auto to : currencies) {
         auto cell = row.at(to);
-        if(isnan(cell)) cell = 0.0;
+        if(isnan(cell.first)) cell.first = 0.0;
         //cout << fmt("%s:%.2f") % to % cell << " ";
-        cout << fmt("%.2f") % cell << " ";
+        cout << fmt("%.2f,%d") % cell.first % cell.second << " ";
       }
       cout << endl;
     }
@@ -154,21 +183,21 @@ namespace xrate {
 
 int main(int argc, char**argv) {
   vector<xrate::Matrix> rates_sq = {
-    {{ "USD", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", 3.5} } },
-    { "EUR", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", 3.2},{"HKD", NAN} } },
-    { "CHF", { {"USD", NAN},{"EUR", 0.8},{"CHF", NAN},{"TWD", NAN},{"HKD", NAN} } },
-    { "TWD", { {"USD", 0.3},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", NAN} } },
-    { "HKD", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", NAN} } },},
-    {{ "USD", { {"USD", NAN},{"EUR", 0.8},{"CHF", NAN},{"TWD", NAN},{"HKD", NAN} } },
-    { "EUR", { {"USD", NAN},{"EUR", NAN},{"CHF", 1.2},{"TWD", NAN},{"HKD", NAN} } },
-    { "CHF", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", 4.0},{"HKD", NAN} } },
-    { "TWD", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", 2.0} } },
-    { "HKD", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", NAN} } },},
-    {{ "USD", { {"USD", NAN},{"EUR", 0.8},{"CHF", 1.0},{"TWD", NAN},{"HKD", NAN} } },
-    { "EUR", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", 5.2},{"HKD", NAN} } },
-    { "CHF", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", 4.5} } },
-    { "TWD", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", NAN} } },
-    { "HKD", { {"USD", NAN},{"EUR", NAN},{"CHF", NAN},{"TWD", NAN},{"HKD", NAN} } },},
+    { { "USD", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {3.5,1}} } },
+      { "EUR", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {3.2,1}},{"HKD", {NAN,1}} } },
+      { "CHF", { {"USD", {NAN,1}},{"EUR", {0.8,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },
+      { "TWD", { {"USD", {0.3,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },
+      { "HKD", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },},
+    { { "USD", { {"USD", {NAN,1}},{"EUR", {0.8,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },
+      { "EUR", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {1.2,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },
+      { "CHF", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {4.0,1}},{"HKD", {NAN,1}} } },
+      { "TWD", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {2.0,1}} } },
+      { "HKD", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },},
+    { { "USD", { {"USD", {NAN,1}},{"EUR", {0.8,1}},{"CHF", {1.0,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },
+      { "EUR", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {5.2,1}},{"HKD", {NAN,1}} } },
+      { "CHF", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {4.5,1}} } },
+      { "TWD", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },
+      { "HKD", { {"USD", {NAN,1}},{"EUR", {NAN,1}},{"CHF", {NAN,1}},{"TWD", {NAN,1}},{"HKD", {NAN,1}} } },},
   };
 
   for(auto& rates : rates_sq) {
