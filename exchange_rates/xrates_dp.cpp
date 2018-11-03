@@ -37,10 +37,9 @@ namespace xrate {
     return (!isnan(lhs.first) && lhs.second <= 3);
   }
 
-  auto build_cell_it(const Matrix& rates, const vector<string_view>& currencies) {
+  auto build_cell_it(const vector<string_view>& currencies) {
     auto it = [
         &currencies, 
-        &rates,
         c1_it = size_t(0),
         c2_it = size_t(0)]() mutable {
       const auto len = currencies.size();
@@ -57,7 +56,7 @@ namespace xrate {
   }
 
   void patch_backpaths(Matrix& rates, const vector<string_view>& currencies) {
-    auto iterator_over_cells = build_cell_it(rates, currencies);
+    auto iterator_over_cells = build_cell_it(currencies);
 
     for(auto pcurr = iterator_over_cells();
         pcurr.first.size();
@@ -140,7 +139,7 @@ namespace xrate {
 
   void all_pairs_shortest(Matrix& rates) {
     auto currencies = build_currency_list(rates);
-    auto iterator_over_cells = build_cell_it(rates, currencies);
+    auto iterator_over_cells = build_cell_it(currencies);
 
     patch_backpaths(rates, currencies);
     print_exchange_matrix(rates);
