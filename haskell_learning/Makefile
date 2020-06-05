@@ -14,7 +14,7 @@ clean:
 	rm -r $(BIN_DIR)
 
 bin:
-	ln -s "$(BIN_DIR)" bin
+	[[ -L bin ]] || ln -s "$(BIN_DIR)" bin
 
 $(BIN_DIR):
 	mkdir $(BIN_DIR)

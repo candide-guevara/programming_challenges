@@ -1,62 +1,49 @@
 import Text.Printf as T
 
-data Node v = Node { value::v, left::(Maybe (Node v)), right::(Maybe (Node v)) } deriving Show
+data Node v = Empty | Node { value::v, left::(Node v), right::(Node v) } deriving Show
 
-consChild :: v -> Maybe (Node v)
-consChild v = Just $ Node v Nothing Nothing
+consChild :: v -> (Node v)
+consChild v = Node v Empty Empty
 
 addValue :: Ord v => (Node v) -> v -> Node v
-addValue n i | (value n) <= i = 
-                case (right n) of
-                  Nothing -> Node (value n) (left n) (consChild i)
-                  Just c  -> Node (value n) (left n) (Just $ addValue c i)
-             | otherwise     =
-               case (left n) of
-                 Nothing -> Node (value n) (consChild i) (right n) 
-                 Just c  -> Node (value n) (Just $ addValue c i) (right n)
+addValue Empty i = consChild i
+addValue (Node v l r) i | v <= i    = Node v l (addValue r i)
+                        | otherwise = Node v (addValue l i) r
 
 buildTree :: Ord v => (Node v) -> [v] -> Node v
-buildTree root is = foldr (flip addValue) root is
+buildTree root is = foldr (\i a -> addValue a i) root is
 
 dFirst :: (Node v) -> [v]
-dFirst (Node v Nothing Nothing) = [v]
-dFirst (Node v (Just l) Nothing) = v:(dFirst l)
-dFirst (Node v Nothing (Just r)) = v:(dFirst r)
-dFirst (Node v (Just l) (Just r)) = v:(dFirst l) ++ (dFirst r)
+dFirst Empty = []
+dFirst (Node v l r) = v:(dFirst l) ++ (dFirst r)
 
 dFirst' :: (Node v) -> [v]
-dFirst' (Node v Nothing Nothing) = [v]
-dFirst' (Node v (Just l) Nothing) = (dFirst' l) ++ [v]
-dFirst' (Node v Nothing (Just r)) = v:(dFirst' r)
-dFirst' (Node v (Just l) (Just r)) = (dFirst' l) ++ v:(dFirst' r)
+dFirst' Empty = []
+dFirst' (Node v l r) = (dFirst' l) ++ v:(dFirst' r)
 
 bFirst  :: (Node v) -> [v]
-bFirst' :: [Node v] -> [v] -> [v]
 bFirst n = bFirst' [n] []
+
+bFirst' :: [Node v] -> [v] -> [v]
 bFirst' [] l = l
 bFirst' (n:ns) ll = case n of
-  Node v Nothing Nothing   -> bFirst' ns (ll ++ [v])
-  Node v (Just l) Nothing  -> bFirst' (ns ++ [l]) (ll ++ [v])
-  Node v Nothing (Just r)  -> bFirst' (ns ++ [r]) (ll ++ [v])
-  Node v (Just l) (Just r) -> bFirst' (ns ++ [l,r]) (ll ++ [v])
+  Empty        -> bFirst' ns ll
+  (Node v l r) -> bFirst' (ns ++ [l,r]) (ll ++ [v])
 
 isThere :: Ord v => (Node v) -> v -> Bool
-isThere n i | (value n) == i = True
-            | (value n) >= i = case (left n) of
-              Just c -> isThere c i
-              _      -> False
-            | otherwise      = case (right n) of
-              Just c -> isThere c i
-              _      -> False
+isThere Empty i = False
+isThere (Node v l r) i | v == i    = True
+                       | v <= i    = isThere r i
+                       | otherwise = isThere l i
 
-root = Node 5 Nothing Nothing
+root = consChild 5
 tree = buildTree root [7,1,2,9,3,6,7,8]
 ordered_nodes = dFirst' tree
-breadth_nodes = bFirst tree
+breadth_nodes = bFirst  tree
 
 main = do 
-  print breadth_nodes
-  print ordered_nodes
-  T.printf "isThere 6 = %v\n" (show $ isThere tree 6)
+  T.printf "breadth_nodes = %v (expect: [5,3,8,2,7,9,1,6,7])\n" (show breadth_nodes)
+  T.printf "depth_nodes = %v (expect: [1,2,3,5,6,7,7,8,9])\n" (show ordered_nodes)
+  T.printf "isThere 6 = %v\n"  (show $ isThere tree 6)
   T.printf "isThere 66 = %v\n" (show $ isThere tree 66)
 
