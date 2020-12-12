@@ -8,10 +8,13 @@ GHCFLAGS := -dynamic -outputdir $(BIN_DIR)
 SOURCES  := $(wildcard *.hs)
 TARGETS  := $(addprefix $(BIN_DIR)/, $(basename $(SOURCES)) ) 
 
-all: $(BIN_DIR) $(TARGETS)
+all: bin $(BIN_DIR) $(TARGETS)
 
 clean:
 	rm -r $(BIN_DIR)
+
+bin:
+	[[ -L bin ]] || ln -s "$(BIN_DIR)" bin
 
 $(BIN_DIR):
 	mkdir $(BIN_DIR)
