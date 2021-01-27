@@ -9,6 +9,10 @@ const Unknown = "UNKNOWN"
 const KeyPress = "KEY_PRESS"
 const KeyRelease = "KEY_RELEASE"
 const KeyRepeat = "KEY_REPEAT"
+const DownMov = "DOWN"
+const UpMov = "UP"
+const RightMov = "RIGHT"
+const LeftMov = "LEFT"
 const KeyPressCode = 1
 const KeyReleaseCode = 0
 const KeyRepeatCode = 2
@@ -54,9 +58,10 @@ func (self *linux_input_ev) TypeName() string {
 
 func (self *linux_input_ev) CodeName() string {
   switch self.EvType {
-    case C.EV_SYN      : return self.codeNameSyn()
     case C.EV_KEY      : return self.codeNameKey()
     case C.EV_MSC      : return self.codeNameMsc()
+    case C.EV_REL      : return self.codeNameRel()
+    case C.EV_SYN      : return self.codeNameSyn()
     default: return fmt.Sprintf("%s(%d)", Unknown, self.EvCode)
   }
 }
@@ -64,6 +69,7 @@ func (self *linux_input_ev) CodeName() string {
 func (self *linux_input_ev) ValueName() string {
   switch self.EvType {
     case C.EV_KEY      : return self.valueNameKey()
+    case C.EV_REL      : return self.valueNameRel()
     default: return fmt.Sprintf("%s(%d)", Unknown, self.Value)
   }
 }
@@ -74,6 +80,41 @@ func (self *linux_input_ev) valueNameKey() string {
     case KeyReleaseCode: return KeyRelease
     case KeyRepeatCode:  return KeyRepeat
     default: return fmt.Sprintf("%s(%d)", Unknown, self.Value)
+  }
+}
+
+func (self *linux_input_ev) valueNameRel() string {
+  switch self.EvCode {
+    case C.REL_X:
+      if self.Value > 0 { return fmt.Sprintf("%s(%d)", RightMov, self.Value)
+      } else { return fmt.Sprintf("%s(%d)", LeftMov, self.Value) }
+    case C.REL_Y: fallthrough
+    case C.REL_HWHEEL: fallthrough
+    case C.REL_WHEEL: fallthrough
+    case C.REL_WHEEL_HI_RES: fallthrough
+    case C.REL_HWHEEL_HI_RES:
+      if self.Value > 0 { return fmt.Sprintf("%s(%d)", UpMov, self.Value)
+      } else { return fmt.Sprintf("%s(%d)", DownMov, self.Value) }
+    default: return fmt.Sprintf("%s(%d)", Unknown, self.Value)
+  }
+}
+
+func (self *linux_input_ev) codeNameRel() string {
+  switch self.EvCode {
+    case C.REL_X: return "REL_X"
+    case C.REL_Y: return "REL_Y"
+    case C.REL_Z: return "REL_Z"
+    case C.REL_RX: return "REL_RX"
+    case C.REL_RY: return "REL_RY"
+    case C.REL_RZ: return "REL_RZ"
+    case C.REL_HWHEEL: return "REL_HWHEEL"
+    case C.REL_DIAL: return "REL_DIAL"
+    case C.REL_WHEEL: return "REL_WHEEL"
+    case C.REL_MISC: return "REL_MISC"
+    case C.REL_RESERVED: return "REL_RESERVED"
+    case C.REL_WHEEL_HI_RES: return "REL_WHEEL_HI_RES"
+    case C.REL_HWHEEL_HI_RES: return "REL_HWHEEL_HI_RES"
+    default: return fmt.Sprintf("%s(%d)", Unknown, self.EvCode)
   }
 }
 
@@ -177,6 +218,14 @@ func (self *linux_input_ev) codeNameKey() string {
     case C.KEY_KP3: return "KEY_KP3"
     case C.KEY_KP0: return "KEY_KP0"
     case C.KEY_KPDOT: return "KEY_KPDOT"
+    case C.BTN_LEFT: return "BTN_LEFT"
+    case C.BTN_RIGHT: return "BTN_RIGHT"
+    case C.BTN_MIDDLE: return "BTN_MIDDLE"
+    case C.BTN_SIDE: return "BTN_SIDE" // backward mouse button
+    case C.BTN_EXTRA: return "BTN_EXTRA" // forward mouse button
+    case C.BTN_FORWARD: return "BTN_FORWARD"
+    case C.BTN_BACK: return "BTN_BACK"
+    case C.BTN_TASK: return "BTN_TASK"
     default: return fmt.Sprintf("%s(%d)", Unknown, self.EvCode)
   }
 }
