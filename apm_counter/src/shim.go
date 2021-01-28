@@ -1,6 +1,7 @@
 package main
 
 // #include <linux/input-event-codes.h>
+// #include <linux/input.h>
 import "C"
 import "fmt"
 import "time"
@@ -26,6 +27,7 @@ type linux_input_ev struct {
   EvCode uint16
   Value  int32
 }
+const linuxInputEvSize = C.sizeof_struct_input_event
 
 func (self *linux_input_ev) String() string {
   // time.Format uses a dodgy format string (see https://golang.org/pkg/time/#Time.Format)

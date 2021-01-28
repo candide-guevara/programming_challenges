@@ -2,23 +2,27 @@ package main
 // Using /dev/input files to get events directly from kernel
 // * Event data format : https://www.kernel.org/doc/html/v4.12/input/input.html
 
+import "bytes"
 import "context"
 import "encoding/binary"
+import "errors"
 import "fmt"
+import "io"
 import "os"
 import "sync"
 import "time"
 
 type perFileStats struct {
+  err error
+  ev_count uint
+  bytes_read uint
   reads uint
   resizes uint
-  raw_ev_count uint
-  ev_count uint
-  err error
 }
 
-func (self perFileStats) String() string {
-  return fmt.Sprintf("err='%v'", self.err)
+func (self *perFileStats) String() string {
+  return fmt.Sprintf("ev_count = %d\nbytes_read = %d\nreads = %d\nresizes = %d\nerr='%v'",
+                     self.ev_count, self.bytes_read, self.reads, self.resizes, self.err)
 }
 
 type devInputEventProvider struct {
@@ -36,47 +40,63 @@ func NewDevInputEventProvider(conf Config) EventProvider {
   return &o
 }
 
-func (self *devInputEventProvider) processDevInputEvents(start time.Time, evs []linux_input_ev, out chan EventData) uint {
-  for _, ev_i := range evs {
-    Infof("ev=%s", ev_i.String())
-    out <- EventData{}
+func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, start time.Time, buf []byte, out chan EventData) uint {
+  var ev linux_input_ev
+  stream := bytes.NewReader(buf)
+  for {
+    err := binary.Read(stream, binary.LittleEndian, &ev)
+    if err != nil {
+      if !errors.Is(err, io.EOF) { panic("marshalling should not fail") }
+      break
+    }
+    Debugf("ev=%s", ev.String())
+    select {
+      case out <- EventData{}:
+      case <- ctx.Done(): break
+    }
   }
-  return 0
+  return (uint(len(buf)) / linuxInputEvSize)
 }
 
 func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, file *os.File, out chan EventData) {
-  const max_len = 512
-  const min_len = 4
-  const too_short_duration = 50
-  const too_long_duration = 100
+  // We use a base-6 because a single keystroke is composed of 6 individual events
+  const max_len = linuxInputEvSize * 96
+  const min_len = linuxInputEvSize * 6
+  const timeout_millis = 50 * time.Millisecond
 
   defer file.Close()
   defer self.wait_group.Done()
-  var all_buf [max_len]linux_input_ev
-  var cur_buf []linux_input_ev = all_buf[0:2*min_len]
+
+  var all_buf [max_len]byte
+  var cur_buf []byte = all_buf[0:2*min_len]
+  var start time.Time = self.conf.StartTime()
   var stat perFileStats
-  start := self.conf.StartTime()
+  var actual_len int
 
   for ctx.Err() == nil {
-    read_start := time.Now()
-    stat.reads += 1
     cur_len := uint(len(cur_buf))
-    stat.err = file.SetDeadline(read_start.Add(too_long_duration * time.Millisecond))
+    read_start := time.Now()
+    stat.err = file.SetDeadline(read_start.Add(timeout_millis))
     if stat.err != nil { break }
-    stat.err = binary.Read(file, binary.LittleEndian, &cur_buf)
-    if stat.err != nil { break }
-    stat.raw_ev_count += cur_len
-    stat.ev_count += self.processDevInputEvents(start, cur_buf, out)
+    actual_len, stat.err = file.Read(cur_buf)
+    if stat.err != nil {
+      if !errors.Is(stat.err, os.ErrDeadlineExceeded) { break }
+      stat.err = nil
+      if cur_len < max_len {
+        cur_buf = all_buf[0:cur_len<<1]
+        stat.resizes += 1
+      }
+    }
 
-    elapsed_millis := time.Now().Sub(read_start).Milliseconds()
-    if elapsed_millis < too_short_duration && cur_len > min_len {
+    stat.ev_count += self.processDevInputEvents(ctx, start, all_buf[0:actual_len], out)
+    elapsed_millis := time.Now().Sub(read_start)
+
+    if cur_len > min_len && elapsed_millis < (timeout_millis/2) {
       cur_buf = all_buf[0:cur_len>>1]
       stat.resizes += 1
     }
-    if elapsed_millis > too_long_duration && cur_len < max_len {
-      cur_buf = all_buf[0:cur_len<<1]
-      stat.resizes += 1
-    }
+    stat.reads += 1
+    stat.bytes_read += uint(actual_len)
   }
   self.stats[idx] = stat
 }
@@ -96,7 +116,7 @@ func (self *devInputEventProvider) Listen(ctx context.Context) (chan EventData, 
     self.wait_group.Wait()
     close(ch)
     for idx, stat := range self.stats {
-      Infof("%s = %+v", dev_files[idx], stat)
+      Debugf("%s = %v", dev_files[idx], &stat)
     }
   }()
   return ch, nil
