@@ -1,6 +1,8 @@
 package main
 
 import "context"
+import "os"
+import "os/signal"
 import "reflect"
 import "time"
 
@@ -31,14 +33,27 @@ func waitForClosureReflection(chs ... interface{}) {
   }
 }
 
+func catchInterruptSignal(ctx context.Context, cancel context.CancelFunc) {
+  sig_ch := make(chan os.Signal, 1)
+  signal.Notify(sig_ch, os.Interrupt)
+  go func() {
+    select {
+      case <-sig_ch:
+        cancel()
+        break
+      case <-ctx.Done(): break
+    }
+  }()
+}
+
 func main() {
   var err error
   conf := NewConfigImpl()
   InitLogging(conf)
   prov := NewDevInputEventProvider(conf)
   apms := NewApmProvider(conf)
-  ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
-	defer cancel()
+  ctx, cancel := context.WithCancel(context.Background())
+  catchInterruptSignal(ctx, cancel)
 
   var in_ev <-chan SingleAction
   in_ev, err = prov.Listen(ctx)

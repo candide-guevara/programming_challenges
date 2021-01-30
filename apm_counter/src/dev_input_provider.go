@@ -17,7 +17,7 @@ type perFileStats struct {
   ev_count uint
   bytes_read uint
   reads uint
-  resizes uint
+  read_tos uint
 }
 
 func (self *SingleAction) String() string {
@@ -25,8 +25,8 @@ func (self *SingleAction) String() string {
 }
 
 func (self *perFileStats) String() string {
-  return fmt.Sprintf("ev_count = %d\nbytes_read = %.2e\nreads = %.2e\nresizes = %d\nerr='%v'",
-                     self.ev_count, float32(self.bytes_read), float32(self.reads), self.resizes, self.err)
+  return fmt.Sprintf("ev_count = %d\nbytes_read = %.2e\nreads = %.2e\nread_tos = %.2e\nerr='%v'",
+                     self.ev_count, float32(self.bytes_read), float32(self.reads), float32(self.read_tos), self.err)
 }
 
 type devInputEventProvider struct {
@@ -94,46 +94,48 @@ func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, bu
   return count
 }
 
-func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, file *os.File, out chan<- SingleAction) {
-  // We use a base-6 because a single keystroke is composed of 6 individual events
-  const max_len = linuxInputEvSize * 96
-  const min_len = linuxInputEvSize * 6
+func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, filepath string, out chan<- SingleAction) {
   const read_timeout = 50 * time.Millisecond
-
-  defer file.Close()
   defer self.wait_group.Done()
 
-  var all_buf [max_len]byte
-  var cur_buf []byte = all_buf[0:min_len]
+  // A single keystroke is composed of 6 individual events
+  var file *os.File
   var stat perFileStats
   var actual_len int
+  byte_buffer := make([]byte, linuxInputEvSize * 128)
+  read_end := time.Now().Add(read_timeout)
+
+  read_tick := time.NewTicker(read_timeout)
+  defer read_tick.Stop()
+
+  file, stat.err = os.Open(filepath)
+  if stat.err != nil { return }
+  defer file.Close()
 
   loop:for ctx.Err() == nil {
-    cur_len := uint(len(cur_buf))
-    read_start := time.Now()
-    stat.err = file.SetDeadline(read_start.Add(read_timeout))
+    stat.reads += 1
+    stat.err = file.SetDeadline(read_end)
     if stat.err != nil { break loop }
-    actual_len, stat.err = file.Read(cur_buf)
+
+    actual_len, stat.err = file.Read(byte_buffer)
     if stat.err != nil {
       if !errors.Is(stat.err, os.ErrDeadlineExceeded) { break loop }
       stat.err = nil
-      if cur_len > min_len {
-        cur_buf = all_buf[0:cur_len>>1]
-        stat.resizes += 1
-        Tracef("Decrease buf size=%d -> %d, read=%d", cur_len, len(cur_buf), actual_len)
-      }
+      stat.read_tos += 1
+      read_end = read_end.Add(read_timeout)
+      continue
     }
 
-    stat.ev_count += self.processDevInputEvents(ctx, all_buf[0:actual_len], out)
-    elapsed := time.Since(read_start)
-
-    if cur_len < max_len && elapsed < (read_timeout/2) {
-      cur_buf = all_buf[0:cur_len<<1]
-      stat.resizes += 1
-      Tracef("Increase buf size=%d -> %d, read=%d", cur_len, len(cur_buf), actual_len)
-    }
-    stat.reads += 1
+    stat.ev_count += self.processDevInputEvents(ctx, byte_buffer[0:actual_len], out)
     stat.bytes_read += uint(actual_len)
+    if actual_len == len(byte_buffer) { continue }
+
+    select {
+      case t := <-read_tick.C:
+        if read_end.After(t.Add(read_timeout)) { break }
+        read_end = t.Add(read_timeout)
+      case <-ctx.Done(): break loop
+    }
   }
   self.stats[idx] = stat
 }
@@ -143,18 +145,16 @@ func (self *devInputEventProvider) Listen(ctx context.Context) (<-chan SingleAct
   ch := make(chan SingleAction, 8)
 
   for idx,filepath := range dev_files {
-    fobj, err := os.Open(filepath)
-    if err != nil { return nil, err }
     self.wait_group.Add(1)
-    go self.listenToFile(ctx, idx, fobj, ch)
+    go self.listenToFile(ctx, idx, filepath, ch)
   }
 
   go func() {
     self.wait_group.Wait()
-    close(ch)
     for idx, stat := range self.stats {
       Debugf("%s :\n%v", dev_files[idx], &stat)
     }
+    close(ch)
   }()
   return ch, nil
 }

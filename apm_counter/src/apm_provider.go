@@ -47,6 +47,7 @@ func (self *bucket) reset() {
 
 type apmProviderStats struct {
   buckets_sent uint
+  buckets_dropped uint
   untimely_cleaned_buckets uint
   cum_fill_delay_millis uint
   cum_clean_fill_millis uint
@@ -103,11 +104,11 @@ func (self *apmProviderImpl) checkForDelayInFilling(ev SingleAction) {
 }
 
 func (self *apmProviderImpl) checkForDelayInCleaning(cur_tail uint) uint {
-  cur_tail_no_offset := cur_tail - (self.window_millis / self.period_millis)
+  buf_len := uint(len(self.circ_buffer))
+  cur_tail_no_offset := cur_tail + (self.window_millis / self.period_millis) - buf_len
   offset_duration := time.Duration(cur_tail_no_offset * self.period_millis) * time.Millisecond
   tail_time := self.ev_time_ref.Add(offset_duration)
   delta_millis := time.Since(tail_time).Milliseconds()
-  buf_len := uint(len(self.circ_buffer))
 
   if delta_millis < 0 {
     Warnf("Ticker is ticking too soon by %d ms", delta_millis)
@@ -127,7 +128,7 @@ func (self *apmProviderImpl) checkForDelayInCleaning(cur_tail uint) uint {
 }
 
 func (self *apmProviderImpl) fillHeadAndAccumulatorBuckets(ctx context.Context, ev_chan <-chan SingleAction) {
-  const check_period = 100
+  const check_period = 128
   defer self.wait_group.Done()
   buf_len := uint(len(self.circ_buffer))
   check_counter := 0
@@ -137,6 +138,7 @@ func (self *apmProviderImpl) fillHeadAndAccumulatorBuckets(ctx context.Context, 
       case ev,ok := <-ev_chan:
         if !ok { return }
         head := (ev.MillisSince() / self.period_millis) % buf_len
+        //Tracef("head=%d", head)
         self.circ_buffer[head].update(ev)
         self.accumulator.update(ev)
         check_counter += 1
@@ -149,28 +151,30 @@ func (self *apmProviderImpl) fillHeadAndAccumulatorBuckets(ctx context.Context, 
 }
 
 func (self *apmProviderImpl) cleanTailAndSendApm(ctx context.Context, out chan<- ApmBucket) {
-  const check_period = 10
+  const check_period = 64
   period_tick := time.NewTicker(time.Duration(self.period_millis) * time.Millisecond)
-  tail := self.window_millis / self.period_millis
   defer period_tick.Stop()
   defer self.wait_group.Done()
   buf_len := uint(len(self.circ_buffer))
+  tail := buf_len - (self.window_millis / self.period_millis)
   check_counter := 0
 
   for {
     select {
       case bucket_time := <-period_tick.C:
+        self.stats.buckets_sent += 1
         tail_idx := tail % buf_len
         tail += 1
         self.decumulator.add(self.circ_buffer[tail_idx])
         self.circ_buffer[tail_idx].reset()
         if len(out) > 0 {
           Warnf("Channel full, dropping bucket %v", self.calculateApmBucket(bucket_time))
+          self.stats.buckets_dropped += 1
           continue
         }
 
         b := self.calculateApmBucket(bucket_time)
-        //Tracef("%v", b)
+        //Tracef("tail_idx=%d, buf_len=%d, bucket=%v", tail_idx, buf_len, b)
         out <- b
 
         check_counter += 1
@@ -191,8 +195,9 @@ func (self *apmProviderImpl) AggregateEvents(ctx context.Context, ev_chan <-chan
 
   go func() {
     self.wait_group.Wait()
-    close(out)
+    Debugf("Total APM = %v", self.accumulator)
     Debugf("%+v", self.stats)
+    close(out)
   }()
   return out, nil
 }
