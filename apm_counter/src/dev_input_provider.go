@@ -20,13 +20,19 @@ type perFileStats struct {
   resizes uint
 }
 
+func (self *SingleAction) String() string {
+  return ""
+}
+
 func (self *perFileStats) String() string {
-  return fmt.Sprintf("ev_count = %d\nbytes_read = %d\nreads = %d\nresizes = %d\nerr='%v'",
-                     self.ev_count, self.bytes_read, self.reads, self.resizes, self.err)
+  return fmt.Sprintf("ev_count = %d\nbytes_read = %.2e\nreads = %.2e\nresizes = %d\nerr='%v'",
+                     self.ev_count, float32(self.bytes_read), float32(self.reads), self.resizes, self.err)
 }
 
 type devInputEventProvider struct {
   conf Config
+  ev_time_ref time.Time
+  lastStrokeEvMillis uint
   wait_group *sync.WaitGroup
   stats []perFileStats
 }
@@ -34,66 +40,97 @@ type devInputEventProvider struct {
 func NewDevInputEventProvider(conf Config) EventProvider {
   o := devInputEventProvider{
     conf,
+    conf.StartTime(),
+    0,
     new(sync.WaitGroup),
     make([]perFileStats, len(conf.DevicesToListenTo())),
   }
   return &o
 }
 
-func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, start time.Time, buf []byte, out chan EventData) uint {
-  var ev linux_input_ev
+func (self *devInputEventProvider) linuxEvToSingleAction(ev *linuxInputEv) (SingleAction, bool) {
+  var action ActionT
+  if ev.IsMseClick() {
+    action = ActionBtn
+  } else if ev.IsMseStroke() {
+    action = ActionMse
+  } else if ev.IsAnyKeyPress() && !ev.IsModifierKey() {
+    action = ActionKdb
+  } else {
+    return SingleAction{}, false
+  }
+  return SingleAction {
+    uint(ev.EvTime().Sub(self.ev_time_ref).Milliseconds()),
+    action,
+  }, true
+}
+
+func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, buf []byte, out chan<- SingleAction) uint {
+  const between_strokes_millis = 67
+  var ev linuxInputEv
+  var count uint = 0
   stream := bytes.NewReader(buf)
-  for {
+
+  loop:for {
     err := binary.Read(stream, binary.LittleEndian, &ev)
     if err != nil {
       if !errors.Is(err, io.EOF) { panic("marshalling should not fail") }
-      break
+      break loop
     }
-    Debugf("ev=%s", ev.String())
+    //Tracef("ev=%s", ev.String())
+    data, valid := self.linuxEvToSingleAction(&ev)
+    if !valid { continue }
+    if data.ActionCode() == ActionMse {
+      is_same_stroke := (data.MillisSince() - self.lastStrokeEvMillis < between_strokes_millis)
+      self.lastStrokeEvMillis = data.MillisSince()
+      if is_same_stroke { continue }
+    }
+    count += 1
     select {
-      case out <- EventData{}:
-      case <- ctx.Done(): break
+      case out <-data: // Tracef("data=%v", data)
+      case <-ctx.Done(): break loop
     }
   }
-  return (uint(len(buf)) / linuxInputEvSize)
+  return count
 }
 
-func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, file *os.File, out chan EventData) {
+func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, file *os.File, out chan<- SingleAction) {
   // We use a base-6 because a single keystroke is composed of 6 individual events
   const max_len = linuxInputEvSize * 96
   const min_len = linuxInputEvSize * 6
-  const timeout_millis = 50 * time.Millisecond
+  const read_timeout = 50 * time.Millisecond
 
   defer file.Close()
   defer self.wait_group.Done()
 
   var all_buf [max_len]byte
-  var cur_buf []byte = all_buf[0:2*min_len]
-  var start time.Time = self.conf.StartTime()
+  var cur_buf []byte = all_buf[0:min_len]
   var stat perFileStats
   var actual_len int
 
-  for ctx.Err() == nil {
+  loop:for ctx.Err() == nil {
     cur_len := uint(len(cur_buf))
     read_start := time.Now()
-    stat.err = file.SetDeadline(read_start.Add(timeout_millis))
-    if stat.err != nil { break }
+    stat.err = file.SetDeadline(read_start.Add(read_timeout))
+    if stat.err != nil { break loop }
     actual_len, stat.err = file.Read(cur_buf)
     if stat.err != nil {
-      if !errors.Is(stat.err, os.ErrDeadlineExceeded) { break }
+      if !errors.Is(stat.err, os.ErrDeadlineExceeded) { break loop }
       stat.err = nil
-      if cur_len < max_len {
-        cur_buf = all_buf[0:cur_len<<1]
+      if cur_len > min_len {
+        cur_buf = all_buf[0:cur_len>>1]
         stat.resizes += 1
+        Tracef("Decrease buf size=%d -> %d, read=%d", cur_len, len(cur_buf), actual_len)
       }
     }
 
-    stat.ev_count += self.processDevInputEvents(ctx, start, all_buf[0:actual_len], out)
-    elapsed_millis := time.Now().Sub(read_start)
+    stat.ev_count += self.processDevInputEvents(ctx, all_buf[0:actual_len], out)
+    elapsed := time.Since(read_start)
 
-    if cur_len > min_len && elapsed_millis < (timeout_millis/2) {
-      cur_buf = all_buf[0:cur_len>>1]
+    if cur_len < max_len && elapsed < (read_timeout/2) {
+      cur_buf = all_buf[0:cur_len<<1]
       stat.resizes += 1
+      Tracef("Increase buf size=%d -> %d, read=%d", cur_len, len(cur_buf), actual_len)
     }
     stat.reads += 1
     stat.bytes_read += uint(actual_len)
@@ -101,9 +138,9 @@ func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, fi
   self.stats[idx] = stat
 }
 
-func (self *devInputEventProvider) Listen(ctx context.Context) (chan EventData, error) {
+func (self *devInputEventProvider) Listen(ctx context.Context) (<-chan SingleAction, error) {
   dev_files := self.conf.DevicesToListenTo()
-  ch := make(chan EventData, 8)
+  ch := make(chan SingleAction, 8)
 
   for idx,filepath := range dev_files {
     fobj, err := os.Open(filepath)
@@ -116,7 +153,7 @@ func (self *devInputEventProvider) Listen(ctx context.Context) (chan EventData, 
     self.wait_group.Wait()
     close(ch)
     for idx, stat := range self.stats {
-      Debugf("%s = %v", dev_files[idx], &stat)
+      Debugf("%s :\n%v", dev_files[idx], &stat)
     }
   }()
   return ch, nil

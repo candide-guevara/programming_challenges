@@ -20,7 +20,7 @@ const KeyRepeatCode = 2
 
 // see linux/input.h
 // see /usr/include/linux/input-event-codes.h
-type linux_input_ev struct {
+type linuxInputEv struct {
   Secs   int64
   Usecs  int64
   EvType uint16
@@ -29,18 +29,72 @@ type linux_input_ev struct {
 }
 const linuxInputEvSize = C.sizeof_struct_input_event
 
-func (self *linux_input_ev) String() string {
+func (self *linuxInputEv) String() string {
   // time.Format uses a dodgy format string (see https://golang.org/pkg/time/#Time.Format)
   return fmt.Sprintf("{%s  %s  %s  time='%s'}",
                      self.TypeName(), self.CodeName(), self.ValueName(),
                      self.EvTime().Format("15:04:05.000"))
 }
 
-func (self *linux_input_ev) EvTime() time.Time {
+func (self *linuxInputEv) IsMouseBtn() bool {
+  if self.EvType != C.EV_KEY { return false }
+  switch self.EvCode {
+    case C.BTN_LEFT: return true
+    case C.BTN_RIGHT: return true
+    case C.BTN_MIDDLE: return true
+    case C.BTN_SIDE: return true
+    case C.BTN_EXTRA: return true
+    case C.BTN_FORWARD: return true
+    case C.BTN_BACK: return true
+    case C.BTN_TASK: return true
+    default: return false
+  }
+}
+
+func (self *linuxInputEv) IsModifierKey() bool {
+  if self.EvType != C.EV_KEY { return false }
+  switch self.EvCode {
+    case C.KEY_LEFTCTRL: return true
+    case C.KEY_LEFTSHIFT: return true
+    case C.KEY_RIGHTSHIFT: return true
+    case C.KEY_LEFTALT: return true
+    case C.KEY_CAPSLOCK: return true
+    case C.KEY_NUMLOCK: return true
+    case C.KEY_SCROLLLOCK: return true
+    case C.KEY_RIGHTCTRL: return true
+    case C.KEY_RIGHTALT: return true
+    case C.KEY_LEFTMETA: return true
+    case C.KEY_RIGHTMETA: return true
+    default: return false
+  }
+}
+
+func (self *linuxInputEv) IsMseStroke() bool {
+  if self.EvType != C.EV_REL { return false }
+  switch self.EvCode {
+    case C.REL_X: return true
+    case C.REL_Y: return true
+    case C.REL_Z: return true
+    case C.REL_RX: return true
+    case C.REL_RY: return true
+    case C.REL_RZ: return true
+    default: return false
+  }
+}
+
+func (self *linuxInputEv) IsAnyKeyPress() bool {
+  return self.Value == KeyPressCode && self.EvType == C.EV_KEY
+}
+
+func (self *linuxInputEv) IsMseClick() bool {
+  return self.Value == KeyPressCode && self.IsMouseBtn()
+}
+
+func (self *linuxInputEv) EvTime() time.Time {
   return time.Unix(self.Secs, self.Usecs * 1000)
 }
 
-func (self *linux_input_ev) TypeName() string {
+func (self *linuxInputEv) TypeName() string {
   switch self.EvType {
     case C.EV_SYN      : return "EV_SYN"
     case C.EV_KEY      : return "EV_KEY"
@@ -58,7 +112,7 @@ func (self *linux_input_ev) TypeName() string {
   }
 }
 
-func (self *linux_input_ev) CodeName() string {
+func (self *linuxInputEv) CodeName() string {
   switch self.EvType {
     case C.EV_KEY      : return self.codeNameKey()
     case C.EV_MSC      : return self.codeNameMsc()
@@ -68,7 +122,7 @@ func (self *linux_input_ev) CodeName() string {
   }
 }
 
-func (self *linux_input_ev) ValueName() string {
+func (self *linuxInputEv) ValueName() string {
   switch self.EvType {
     case C.EV_KEY      : return self.valueNameKey()
     case C.EV_REL      : return self.valueNameRel()
@@ -76,7 +130,7 @@ func (self *linux_input_ev) ValueName() string {
   }
 }
 
-func (self *linux_input_ev) valueNameKey() string {
+func (self *linuxInputEv) valueNameKey() string {
   switch self.Value {
     case KeyPressCode:   return KeyPress
     case KeyReleaseCode: return KeyRelease
@@ -85,7 +139,7 @@ func (self *linux_input_ev) valueNameKey() string {
   }
 }
 
-func (self *linux_input_ev) valueNameRel() string {
+func (self *linuxInputEv) valueNameRel() string {
   switch self.EvCode {
     case C.REL_X:
       if self.Value > 0 { return fmt.Sprintf("%s(%d)", RightMov, self.Value)
@@ -101,7 +155,7 @@ func (self *linux_input_ev) valueNameRel() string {
   }
 }
 
-func (self *linux_input_ev) codeNameRel() string {
+func (self *linuxInputEv) codeNameRel() string {
   switch self.EvCode {
     case C.REL_X: return "REL_X"
     case C.REL_Y: return "REL_Y"
@@ -122,7 +176,7 @@ func (self *linux_input_ev) codeNameRel() string {
 
 // grep -E '#define *SYN_' /usr/include/linux/input-event-codes.h \
 //   | sed -r 's/.*(SYN_\w+).*/case C.\1: return "\1"/'
-func (self *linux_input_ev) codeNameSyn() string {
+func (self *linuxInputEv) codeNameSyn() string {
   switch self.EvCode {
     case C.SYN_REPORT: return "SYN_REPORT"
     case C.SYN_CONFIG: return "SYN_CONFIG"
@@ -134,7 +188,7 @@ func (self *linux_input_ev) codeNameSyn() string {
 
 // grep -E '#define *KEY_' /usr/include/linux/input-event-codes.h \
 //   | sed -r 's/.*(KEY_\w+).*/case C.\1: return "\1"/'
-func (self *linux_input_ev) codeNameKey() string {
+func (self *linuxInputEv) codeNameKey() string {
   switch self.EvCode {
     case C.KEY_RESERVED: return "KEY_RESERVED"
     case C.KEY_ESC: return "KEY_ESC"
@@ -220,6 +274,31 @@ func (self *linux_input_ev) codeNameKey() string {
     case C.KEY_KP3: return "KEY_KP3"
     case C.KEY_KP0: return "KEY_KP0"
     case C.KEY_KPDOT: return "KEY_KPDOT"
+    case C.KEY_F11: return "KEY_F11"
+    case C.KEY_F12: return "KEY_F12"
+    case C.KEY_KPENTER: return "KEY_KPENTER"
+    case C.KEY_RIGHTCTRL: return "KEY_RIGHTCTRL"
+    case C.KEY_KPSLASH: return "KEY_KPSLASH"
+    case C.KEY_SYSRQ: return "KEY_SYSRQ"
+    case C.KEY_RIGHTALT: return "KEY_RIGHTALT"
+    case C.KEY_LINEFEED: return "KEY_LINEFEED"
+    case C.KEY_HOME: return "KEY_HOME"
+    case C.KEY_UP: return "KEY_UP"
+    case C.KEY_PAGEUP: return "KEY_PAGEUP"
+    case C.KEY_LEFT: return "KEY_LEFT"
+    case C.KEY_RIGHT: return "KEY_RIGHT"
+    case C.KEY_END: return "KEY_END"
+    case C.KEY_DOWN: return "KEY_DOWN"
+    case C.KEY_PAGEDOWN: return "KEY_PAGEDOWN"
+    case C.KEY_INSERT: return "KEY_INSERT"
+    case C.KEY_DELETE: return "KEY_DELETE"
+    case C.KEY_KPEQUAL: return "KEY_KPEQUAL"
+    case C.KEY_KPPLUSMINUS: return "KEY_KPPLUSMINUS"
+    case C.KEY_PAUSE: return "KEY_PAUSE"
+    case C.KEY_KPCOMMA: return "KEY_KPCOMMA"
+    case C.KEY_LEFTMETA: return "KEY_LEFTMETA"
+    case C.KEY_RIGHTMETA: return "KEY_RIGHTMETA"
+    case C.KEY_MSDOS: return "KEY_MSDOS"
     case C.BTN_LEFT: return "BTN_LEFT"
     case C.BTN_RIGHT: return "BTN_RIGHT"
     case C.BTN_MIDDLE: return "BTN_MIDDLE"
@@ -234,7 +313,7 @@ func (self *linux_input_ev) codeNameKey() string {
 
 // grep -E '#define *MSC_' /usr/include/linux/input-event-codes.h \
 //   | sed -r 's/.*(MSC_\w+).*/case C.\1: return "\1"/'
-func (self *linux_input_ev) codeNameMsc() string {
+func (self *linuxInputEv) codeNameMsc() string {
   switch self.EvCode {
     case C.MSC_SERIAL: return "MSC_SERIAL"
     case C.MSC_PULSELED: return "MSC_PULSELED"

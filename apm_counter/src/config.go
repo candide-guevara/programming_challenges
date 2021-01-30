@@ -6,11 +6,13 @@ type ConfigImpl struct {
   dev_files []string
   start time.Time
   output_period uint
+  log_level LogT
 }
 
 func (self *ConfigImpl) DevicesToListenTo() []string { return self.dev_files }
 func (self *ConfigImpl) StartTime() time.Time { return self.start }
 func (self *ConfigImpl) OuputPeriodMillis() uint { return self.output_period }
+func (self *ConfigImpl) LogLevel() LogT { return self.log_level }
 
 func NewConfigImpl() Config {
   conf := ConfigImpl {
@@ -20,6 +22,7 @@ func NewConfigImpl() Config {
     },
     time.Now(),
     500,
+    LogTrace,
   }
   return &conf
 }
