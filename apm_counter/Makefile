@@ -4,7 +4,7 @@
 
 STAGE_PATH    := /tmp/bin_apm_counter
 GOENV    := $(STAGE_PATH)/go_env
-MYGOSRC  := src
+MYGOSRC  := golang
 
 CC       := gcc
 CPPFLAGS :=
