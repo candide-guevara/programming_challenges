@@ -7,9 +7,9 @@ import "os/signal"
 import "reflect"
 import "time"
 
-func WaitForClosureReflection(chs ... interface{}) {
+func WaitForClosureReflection(wait_for_millis uint, chs ... interface{}) error {
   Infof("Context done, waiting for channels close")
-  timeout := time.NewTimer(501 * time.Millisecond)
+  timeout := time.NewTimer(time.Duration(wait_for_millis) * time.Millisecond)
   defer timeout.Stop()
 
   ch_len := len(chs)
@@ -25,13 +25,14 @@ func WaitForClosureReflection(chs ... interface{}) {
   for done_count < ch_len {
     idx,_,ok := reflect.Select(cases)
     if idx == ch_len {
-      Fatalf("Channels are still open after timeout")
+      fmt.Errorf("Channels (%d/%d) are still open after timeout", done_count, ch_len)
     }
     if !ok {
       done_count += 1
       cases[idx].Chan = reflect.ValueOf(nil)
     }
   }
+  return nil
 }
 
 func CatchInterruptSignal(ctx context.Context, cancel context.CancelFunc) {

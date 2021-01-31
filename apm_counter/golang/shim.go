@@ -18,7 +18,7 @@ const KeyPressCode = 1
 const KeyReleaseCode = 0
 const KeyRepeatCode = 2
 
-// see linux/input.h
+// see /usr/include/linux/input.h
 // see /usr/include/linux/input-event-codes.h
 type linuxInputEv struct {
   Secs   int64
@@ -27,7 +27,14 @@ type linuxInputEv struct {
   EvCode uint16
   Value  int32
 }
-const linuxInputEvSize = C.sizeof_struct_input_event
+const (
+  linuxInputEvSize = C.sizeof_struct_input_event
+  EV_KEY = C.EV_KEY
+  EV_REL = C.EV_REL
+  KEY_1 = C.KEY_1
+  BTN_LEFT = C.BTN_LEFT
+  REL_X = C.REL_X
+)
 
 func (self *linuxInputEv) String() string {
   // time.Format uses a dodgy format string (see https://golang.org/pkg/time/#Time.Format)

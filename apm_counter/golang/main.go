@@ -26,8 +26,9 @@ func main() {
   if err != nil { Fatalf("fiasco : %v", err) }
 
   select {
-    case <-ctx.Done(): WaitForClosureReflection(in_apm, in_ev, recv_done)
+    case <-ctx.Done():
+      err = WaitForClosureReflection(500, in_apm, in_ev, recv_done)
   }
-  Infof("Done")
+  Infof("Done (err=%v)", err)
 }
 

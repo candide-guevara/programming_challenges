@@ -86,13 +86,13 @@ func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, bu
     data, valid := self.linuxEvToSingleAction(&ev)
     if !valid { continue }
     if data.ActionCode() == ActionMse {
-      is_same_stroke := (data.MillisSince() - self.lastStrokeEvMillis < between_strokes_millis)
+      is_same_stroke := (data.MillisSince() - self.lastStrokeEvMillis) < between_strokes_millis
       self.lastStrokeEvMillis = data.MillisSince()
       if is_same_stroke { continue }
     }
     count += 1
     select {
-      case out <-data: // Tracef("data=%v", data)
+      case out <-data: //Tracef("ref_time=%v, data=%v", self.ev_time_ref, data)
       case <-ctx.Done(): break loop
     }
   }

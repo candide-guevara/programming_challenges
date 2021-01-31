@@ -41,7 +41,7 @@ func (self *ConfigImpl) String() string {
   self.log_level)
 }
 
-func NewConfigImpl() Config {
+func NewTestConfig() *ConfigImpl {
   conf := ConfigImpl {
     []string {
       "/dev/input/by-id/usb-Logitech_Gaming_Mouse_G502_1393375E3137-event-mouse",
@@ -55,5 +55,9 @@ func NewConfigImpl() Config {
     LogTrace,
   }
   return &conf
+}
+
+func NewConfigImpl() Config {
+  return NewTestConfig()
 }
 
