@@ -11,15 +11,15 @@ type bucket struct {
 
 type apmBucketImpl struct {
   bucket
-  end_time time.Time
+  millis_since uint
 }
 
-func (self *apmBucketImpl) Time() time.Time { return self.end_time }
+func (self *apmBucketImpl) MillisSince() uint { return self.millis_since }
 func (self *apmBucketImpl) Count(action ActionT) uint { return self.counts[action] }
 
 func (self *apmBucketImpl) String() string {
-  return fmt.Sprintf("counts=%v, time=%s", self.counts,
-                     self.end_time.Format("15:04:05.000"))
+  return fmt.Sprintf("counts=%v, time=%d",
+                     self.counts, self.millis_since)
 }
 
 func (self *bucket) update(ev SingleAction) {
@@ -46,11 +46,12 @@ func (self *bucket) reset() {
 }
 
 type apmProviderStats struct {
+  err error
   buckets_sent uint
   buckets_dropped uint
   untimely_cleaned_buckets uint
-  cum_fill_delay_millis uint
   cum_clean_fill_millis uint
+  cum_fill_delay_millis uint
 }
 
 type apmProviderImpl struct {
@@ -63,6 +64,22 @@ type apmProviderImpl struct {
   decumulator bucket
   stats apmProviderStats
   wait_group *sync.WaitGroup
+}
+
+func (self *apmProviderStats) String() string {
+  return fmt.Sprintf(`
+  buckets_sent    = %d
+  buckets_dropped = %d
+  untimely_cleaned_buckets = %d
+  cum_clean_fill_millis = %d
+  cum_fill_delay_millis = %d
+  err = '%v'`,
+  self.buckets_sent,
+  self.buckets_dropped,
+  self.untimely_cleaned_buckets,
+  self.cum_clean_fill_millis,
+  self.cum_fill_delay_millis,
+  self.err)
 }
 
 func NewApmProvider(conf Config) ApmProvider {
@@ -88,7 +105,7 @@ func NewApmProvider(conf Config) ApmProvider {
 func (self *apmProviderImpl) calculateApmBucket(tick time.Time) ApmBucket {
   b := apmBucketImpl{
     self.accumulator,
-    tick,
+    uint(tick.Sub(self.ev_time_ref).Milliseconds()),
   }
   b.sub(self.decumulator)
   return &b
@@ -136,7 +153,9 @@ func (self *apmProviderImpl) fillHeadAndAccumulatorBuckets(ctx context.Context, 
   for {
     select {
       case ev,ok := <-ev_chan:
-        if !ok { return }
+        if self.stats.err = ErrOnPrematureClosure(ctx, ok); self.stats.err != nil {
+          return
+        }
         head := (ev.MillisSince() / self.period_millis) % buf_len
         //Tracef("head=%d", head)
         self.circ_buffer[head].update(ev)
@@ -194,10 +213,13 @@ func (self *apmProviderImpl) AggregateEvents(ctx context.Context, ev_chan <-chan
   go self.cleanTailAndSendApm(ctx, out)
 
   go func() {
+    defer close(out)
     self.wait_group.Wait()
+    if self.stats.err != nil {
+      Errorf("Abnormal exit: %v", self.stats.err)
+    }
     Debugf("Total APM = %v", self.accumulator)
-    Debugf("%+v", self.stats)
-    close(out)
+    Debugf("%s", self.stats.String())
   }()
   return out, nil
 }

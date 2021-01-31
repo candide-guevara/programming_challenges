@@ -31,9 +31,15 @@ const linuxInputEvSize = C.sizeof_struct_input_event
 
 func (self *linuxInputEv) String() string {
   // time.Format uses a dodgy format string (see https://golang.org/pkg/time/#Time.Format)
-  return fmt.Sprintf("{%s  %s  %s  time='%s'}",
-                     self.TypeName(), self.CodeName(), self.ValueName(),
-                     self.EvTime().Format("15:04:05.000"))
+  return fmt.Sprintf(`
+  type  = %s
+  code  = %s
+  value = %s
+  time  = '%s'`,
+  self.TypeName(),
+  self.CodeName(),
+  self.ValueName(),
+  self.EvTime().Format("15:04:05.000"))
 }
 
 func (self *linuxInputEv) IsMouseBtn() bool {

@@ -1,14 +1,15 @@
 package main
 
 import "context"
+import "fmt"
 import "os"
 import "os/signal"
 import "reflect"
 import "time"
 
-func waitForClosureReflection(chs ... interface{}) {
+func WaitForClosureReflection(chs ... interface{}) {
   Infof("Context done, waiting for channels close")
-  timeout := time.NewTimer(57 * time.Millisecond)
+  timeout := time.NewTimer(501 * time.Millisecond)
   defer timeout.Stop()
 
   ch_len := len(chs)
@@ -33,7 +34,7 @@ func waitForClosureReflection(chs ... interface{}) {
   }
 }
 
-func catchInterruptSignal(ctx context.Context, cancel context.CancelFunc) {
+func CatchInterruptSignal(ctx context.Context, cancel context.CancelFunc) {
   sig_ch := make(chan os.Signal, 1)
   signal.Notify(sig_ch, os.Interrupt)
   go func() {
@@ -46,31 +47,11 @@ func catchInterruptSignal(ctx context.Context, cancel context.CancelFunc) {
   }()
 }
 
-func main() {
-  var err error
-  conf := NewConfigImpl()
-  InitLogging(conf)
-  prov := NewDevInputEventProvider(conf)
-  apms := NewApmProvider(conf)
-  ctx, cancel := context.WithCancel(context.Background())
-  catchInterruptSignal(ctx, cancel)
-
-  var in_ev <-chan SingleAction
-  in_ev, err = prov.Listen(ctx)
-  if err != nil { Fatalf("fiasco : %v", err) }
-  var in_apm <-chan ApmBucket
-  in_apm, err = apms.AggregateEvents(ctx, in_ev)
-  if err != nil { Fatalf("fiasco : %v", err) }
-
-  loop:for {
-    select {
-      case a,ok := <-in_apm:
-        if ok { Infof("%+v", a) }
-      case <-ctx.Done():
-        waitForClosureReflection(in_apm, in_ev)
-        break loop
-    }
+func ErrOnPrematureClosure(ctx context.Context, read_stx bool) error {
+  if read_stx { return nil }
+  if ctx.Err() == nil {
+    return fmt.Errorf("premature channel closure for consumer")
   }
-  Infof("Done")
+  return nil
 }
 

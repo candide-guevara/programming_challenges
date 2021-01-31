@@ -20,13 +20,18 @@ type perFileStats struct {
   read_tos uint
 }
 
-func (self *SingleAction) String() string {
-  return ""
-}
-
 func (self *perFileStats) String() string {
-  return fmt.Sprintf("ev_count = %d\nbytes_read = %.2e\nreads = %.2e\nread_tos = %.2e\nerr='%v'",
-                     self.ev_count, float32(self.bytes_read), float32(self.reads), float32(self.read_tos), self.err)
+  return fmt.Sprintf(`
+  ev_count   = %d
+  bytes_read = %.2e
+  reads      = %.2e
+  read_tos   = %.2e
+  err        = '%v'`,
+  self.ev_count,
+  float32(self.bytes_read),
+  float32(self.reads),
+  float32(self.read_tos),
+  self.err)
 }
 
 type devInputEventProvider struct {
@@ -145,16 +150,21 @@ func (self *devInputEventProvider) Listen(ctx context.Context) (<-chan SingleAct
   ch := make(chan SingleAction, 8)
 
   for idx,filepath := range dev_files {
+    // check the file exists first
+    if _,err := os.Stat(filepath); err != nil { return nil, err }
     self.wait_group.Add(1)
     go self.listenToFile(ctx, idx, filepath, ch)
   }
 
   go func() {
+    defer close(ch)
     self.wait_group.Wait()
     for idx, stat := range self.stats {
-      Debugf("%s :\n%v", dev_files[idx], &stat)
+      if stat.err != nil {
+        Errorf("Abnormal exit: %v", stat.err)
+      }
+      Debugf("%s:%v", dev_files[idx], &stat)
     }
-    close(ch)
   }()
   return ch, nil
 }

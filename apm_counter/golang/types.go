@@ -11,6 +11,15 @@ const (
   ActionCnt ActionT = iota
 )
 
+func (self ActionT) Name() string {
+  switch(self) {
+    case ActionKdb: return "KBD"
+    case ActionMse: return "MSE"
+    case ActionBtn: return "BTN"
+    default: return "UNKNOWN"
+  }
+}
+
 type LogT uint
 const (
   LogTrace LogT = iota
@@ -22,7 +31,7 @@ const (
 )
 
 type ApmBucket interface {
-  Time() time.Time
+  MillisSince() uint
   Count(action ActionT) uint
 }
 
@@ -45,10 +54,17 @@ type ApmProvider interface {
   AggregateEvents(ctx context.Context, ev_chan <-chan SingleAction) (<-chan ApmBucket, error)
 }
 
+type ApmReceiver interface {
+  Listen(ctx context.Context, apm_chan <-chan ApmBucket) (<-chan bool, error)
+}
+
 type Config interface {
-  StartTime() time.Time
   DevicesToListenTo() []string
+  TimeseriesDir() string
+  AoeUserDir() string
+  StartTime() time.Time
   OuputPeriodMillis() uint
   LogLevel() LogT
+  String() string
 }
 
