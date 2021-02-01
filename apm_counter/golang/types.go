@@ -63,7 +63,8 @@ type Config interface {
   TimeseriesDir() string
   AoeUserDir() string
   StartTime() time.Time
-  OuputPeriodMillis() uint
+  WindowsDuration() time.Duration
+  OuputPeriod() time.Duration
   LogLevel() LogT
   String() string
 }

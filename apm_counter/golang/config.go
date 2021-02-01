@@ -11,14 +11,16 @@ type ConfigImpl struct {
   aoe_user_dir string
   timeseries_dir string
   ref_time time.Time
-  output_period uint
+  window_duration time.Duration
+  output_period time.Duration
   log_level LogT
 }
 
 func (self *ConfigImpl) DevicesToListenTo() []string { return self.dev_files }
 func (self *ConfigImpl) TimeseriesDir() string { return self.timeseries_dir }
 func (self *ConfigImpl) StartTime() time.Time { return self.ref_time }
-func (self *ConfigImpl) OuputPeriodMillis() uint { return self.output_period }
+func (self *ConfigImpl) WindowsDuration() time.Duration { return self.window_duration }
+func (self *ConfigImpl) OuputPeriod() time.Duration { return self.output_period }
 func (self *ConfigImpl) LogLevel() LogT { return self.log_level }
 func (self *ConfigImpl) AoeUserDir() string {
   return filepath.Join(self.steam_dir, self.aoe_user_dir)
@@ -51,7 +53,8 @@ func NewTestConfig() *ConfigImpl {
     "steamapps/compatdata/813780/pfx/drive_c/users/steamuser/Games/Age of Empires 2 DE",
     os.Getenv("TEMP"),
     time.Now(),
-    500,
+    60 * time.Second,
+    500 * time.Millisecond,
     LogTrace,
   }
   return &conf

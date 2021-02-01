@@ -102,7 +102,7 @@ func TestDevInputProviderListen(t *testing.T) {
   ctx, cancel, conf := DevInputProviderTestSetup(pipe_path)
 
   var in_ev <-chan SingleAction
-  prov := NewDevInputEventProvider(conf)
+  prov := NewDevInputEventProvider(conf).(*devInputEventProvider)
   in_ev, err = prov.Listen(ctx)
   if err != nil { t.Fatalf("could not listen: %v", err) }
 
@@ -112,20 +112,23 @@ func TestDevInputProviderListen(t *testing.T) {
   select {
     case <-done_ch: break
     case <-time.After(100 * time.Millisecond):
-      t.Fatalf("Failed to input after timeout")
+      t.Fatalf("Failed to input before timeout")
   }
   select {
     case actions := <-out_ev:
       cancel()
       compareActions(t, expected_actions, actions)
     case <-time.After(100 * time.Millisecond):
-      t.Fatalf("Failed to collect enough after timeout")
+      t.Fatalf("Failed to collect enough before timeout")
   }
   select {
     case _,ok := <-in_ev:
       if ok { t.Fatalf("Did not consume all events in the pipe") }
     case <-time.After(100 * time.Millisecond):
-      t.Fatalf("Failed to close dev input channel after timeout")
+      t.Fatalf("Failed to close dev input channel before timeout")
+  }
+  if prov.stats[0].err != nil {
+    t.Errorf("Dev input ended with error: %v", prov.stats[0].err)
   }
 }
 

@@ -65,7 +65,8 @@ func (self *csvApmReceiver) dumpToCvsFile(ctx context.Context, apm_chan <-chan A
     select {
       case apm,ok := <-apm_chan:
         self.stats.err = ErrOnPrematureClosure(ctx, ok)
-        if self.stats.err != nil { break loop }
+        if !ok { break loop }
+        //Tracef("apm=%v", apm)
         line := fmt.Sprintf("%d,%d,%d\n",
                             apm.Count(ActionKdb), apm.Count(ActionMse), apm.Count(ActionBtn))
         _,self.stats.err = file.WriteString(line)

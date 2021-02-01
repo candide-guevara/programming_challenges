@@ -49,8 +49,7 @@ func CatchInterruptSignal(ctx context.Context, cancel context.CancelFunc) {
 }
 
 func ErrOnPrematureClosure(ctx context.Context, read_stx bool) error {
-  if read_stx { return nil }
-  if ctx.Err() == nil {
+  if !read_stx && ctx.Err() == nil {
     return fmt.Errorf("premature channel closure for consumer")
   }
   return nil

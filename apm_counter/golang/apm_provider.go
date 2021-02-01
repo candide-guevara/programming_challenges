@@ -5,12 +5,12 @@ import "fmt"
 import "sync"
 import "time"
 
-type bucket struct {
+type bucketT struct {
   counts [ActionCnt]uint
 }
 
 type apmBucketImpl struct {
-  bucket
+  bucketT
   millis_since uint
 }
 
@@ -22,24 +22,24 @@ func (self *apmBucketImpl) String() string {
                      self.counts, self.millis_since)
 }
 
-func (self *bucket) update(ev SingleAction) {
+func (self *bucketT) update(ev SingleAction) {
   self.counts[ev.ActionCode()] += 1
 }
 
-func (self *bucket) add(b bucket) {
+func (self *bucketT) add(b bucketT) {
   for idx,v := range b.counts {
     self.counts[idx] += v
   }
 }
 
-func (self *bucket) sub(b bucket) {
+func (self *bucketT) sub(b bucketT) {
   for idx,v := range b.counts {
     if v > self.counts[idx] { panic("v > self.counts[idx]") }
     self.counts[idx] -= v
   }
 }
 
-func (self *bucket) reset() {
+func (self *bucketT) reset() {
   for idx,_ := range self.counts {
     self.counts[idx] = 0
   }
@@ -59,9 +59,9 @@ type apmProviderImpl struct {
   ev_time_ref time.Time
   window_millis uint
   period_millis uint
-  circ_buffer []bucket
-  accumulator bucket
-  decumulator bucket
+  circ_buffer []bucketT
+  accumulator bucketT
+  decumulator bucketT
   stats apmProviderStats
   wait_group *sync.WaitGroup
 }
@@ -83,20 +83,19 @@ func (self *apmProviderStats) String() string {
 }
 
 func NewApmProvider(conf Config) ApmProvider {
-  min_as_millis := uint((1 * time.Minute).Milliseconds())
-  if min_as_millis % conf.OuputPeriodMillis() != 0 {
+  if conf.WindowsDuration() % conf.OuputPeriod() != 0 {
     panic("Output period must be multiple of a minute")
   }
-  buckets_per_min := min_as_millis / conf.OuputPeriodMillis()
+  buckets_per_min := conf.WindowsDuration() / conf.OuputPeriod()
   return &apmProviderImpl{
     conf,
     conf.StartTime(),
-    min_as_millis,
-    conf.OuputPeriodMillis(),
+    uint(conf.WindowsDuration().Milliseconds()),
+    uint(conf.OuputPeriod().Milliseconds()),
     // zero initialized ?
-    make([]bucket, (12 * buckets_per_min / 10)),
-    bucket{},
-    bucket{},
+    make([]bucketT, (12 * buckets_per_min / 10)),
+    bucketT{},
+    bucketT{},
     apmProviderStats{},
     new(sync.WaitGroup),
   }
@@ -111,13 +110,14 @@ func (self *apmProviderImpl) calculateApmBucket(tick time.Time) ApmBucket {
   return &b
 }
 
-func (self *apmProviderImpl) checkForDelayInFilling(ev SingleAction) {
+func (self *apmProviderImpl) checkForDelayInFilling(ev SingleAction) uint {
   ev_time := self.ev_time_ref.Add(ev.DurationSince())
   delta_millis := uint(time.Since(ev_time).Milliseconds())
   self.stats.cum_fill_delay_millis += delta_millis
   if delta_millis > (self.period_millis / 2) {
     Warnf("Filling buckets from events with a %d ms delay", delta_millis)
   }
+  return delta_millis
 }
 
 func (self *apmProviderImpl) checkForDelayInCleaning(cur_tail uint) uint {
@@ -153,13 +153,12 @@ func (self *apmProviderImpl) fillHeadAndAccumulatorBuckets(ctx context.Context, 
   for {
     select {
       case ev,ok := <-ev_chan:
-        if self.stats.err = ErrOnPrematureClosure(ctx, ok); self.stats.err != nil {
-          return
-        }
+        self.stats.err = ErrOnPrematureClosure(ctx, ok)
+        if !ok { return }
         head := (ev.MillisSince() / self.period_millis) % buf_len
-        //Tracef("head=%d", head)
         self.circ_buffer[head].update(ev)
         self.accumulator.update(ev)
+        //Tracef("ev=%v, bucket=%v, head=%d", ev, self.circ_buffer[head], head)
         check_counter += 1
         if check_counter % check_period == 0 {
           self.checkForDelayInFilling(ev)
@@ -193,7 +192,7 @@ func (self *apmProviderImpl) cleanTailAndSendApm(ctx context.Context, out chan<-
         }
 
         b := self.calculateApmBucket(bucket_time)
-        //Tracef("tail_idx=%d, buf_len=%d, bucket=%v", tail_idx, buf_len, b)
+        //Tracef("tail_idx=%d, bucket=%v, acc=%v, dec=%v", tail_idx, b, self.accumulator, self.decumulator)
         out <- b
 
         check_counter += 1
