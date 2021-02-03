@@ -58,6 +58,11 @@ type ApmReceiver interface {
   Listen(ctx context.Context, apm_chan <-chan ApmBucket) (<-chan bool, error)
 }
 
+type TimeseriesDb interface {
+  RecordTimeseries()
+  GetTimeserieFilepath()
+}
+
 type Config interface {
   DevicesToListenTo() []string
   TimeseriesDir() string
