@@ -1,10 +1,12 @@
 .ONESHELL:
 .SECONDARY:
-.PHONY: all clean fs_init c_code go_code go_unittest test sysinfo
+.PHONY: all clean fs_init c_code go_code proto go_unittest test
 
 STAGE_PATH    := /tmp/bin_apm_counter
 GOENV    := $(STAGE_PATH)/go_env
-MYGOSRC  := golang
+GO_PROTOC_INSTALL := $(STAGE_PATH)/gobin/protoc-gen-go
+SRC_GO  := golang
+SRC_PROTO := proto
 
 CC       := gcc
 CPPFLAGS :=
@@ -14,7 +16,7 @@ LDLIBS   :=
 
 all: go_code
 
-go_code test: | bin
+go_code test: proto | bin
 
 clean:
 	if [[ -f "$(GOENV)" ]]; then
@@ -26,11 +28,11 @@ clean:
 test: all go_unittest;
 
 go_code: c_code $(GOENV) $(go_files) $(GO_PROTO_GEN_SRCS)
-	pushd "$(MYGOSRC)"
+	pushd "$(SRC_GO)"
 	GOENV="$(GOENV)" go install ./...
 
 go_unittest: go_code
-	pushd "$(MYGOSRC)"
+	pushd "$(SRC_GO)"
 	# add --test.v to get verbose tests
 	GOENV="$(GOENV)" go test ./...
 
@@ -43,9 +45,17 @@ $(GOENV): bin
 														 GOCACHE="$(STAGE_PATH)/go-build"
 	#GOENV="$(GOENV)" go env
 
+proto: $(SRC_GO)/proto/timeserie.go;
+$(SRC_GO)/proto/timeserie.go: $(SRC_PROTO)/timeserie.proto $(GOENV) | $(GO_PROTOC_INSTALL)
+	export PATH="$(PATH):`GOENV="$(GOENV)" go env GOBIN`"
+	protoc '-I=$(SRC_PROTO)' '--go_out=$(SRC_GO)' "$<"
+
 bin: | $(STAGE_PATH)
 	[[ -L bin ]] || ln -s $(STAGE_PATH) bin
 
 $(STAGE_PATH):
 	[[ -d $(STAGE_PATH) ]] || mkdir $(STAGE_PATH)
+
+$(GO_PROTOC_INSTALL): $(GOENV)
+	GOENV="$(GOENV)" go get google.golang.org/protobuf/cmd/protoc-gen-go
 
