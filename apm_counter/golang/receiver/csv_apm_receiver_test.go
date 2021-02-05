@@ -1,4 +1,4 @@
-package main
+package receiver
 
 import "context"
 import "fmt"
@@ -8,22 +8,29 @@ import "strings"
 import "testing"
 import "time"
 
-func fillApmsAndExpectedCsv(t *testing.T) (chan ApmBucket, []string) {
-  apms := []apmBucketImpl {
-    {bucketT{[ActionCnt]uint{0,0,0}}, 10},
-    {bucketT{[ActionCnt]uint{3,1,0}}, 20},
-    {bucketT{[ActionCnt]uint{2,1,0}}, 30},
-    {bucketT{[ActionCnt]uint{2,3,0}}, 40},
+import "apm_counter/provider"
+import "apm_counter/types"
+import "apm_counter/util"
+
+func fillApmsAndExpectedCsv(t *testing.T) (chan types.ApmBucket, []string) {
+  apms := []provider.ApmBucketImpl {
+    {provider.BucketT{[types.ActionCnt]uint{0,0,0}}, 10},
+    {provider.BucketT{[types.ActionCnt]uint{3,1,0}}, 20},
+    {provider.BucketT{[types.ActionCnt]uint{2,1,0}}, 30},
+    {provider.BucketT{[types.ActionCnt]uint{2,3,0}}, 40},
   }
   expected_csv := []string {
-    fmt.Sprintf("%s,%s,%s", ActionKdb.Name(), ActionMse.Name(), ActionBtn.Name()),
+    fmt.Sprintf("%s,%s,%s",
+                types.ActionKdb.Name(),
+                types.ActionMse.Name(),
+                types.ActionBtn.Name()),
     "0,0,0",
     "3,1,0",
     "2,1,0",
     "2,3,0",
     "",
   }
-  ch := make(chan ApmBucket, len(apms))
+  ch := make(chan types.ApmBucket, len(apms))
   // Be careful it is a trap !
   // Randomly segfaults and when it does not then all items in the channel point to the last element in apms
   // for _,a := range apms { ch <- &a }
@@ -49,17 +56,17 @@ func compareFileContentToStr(t *testing.T, filepath string, expected_lines []str
   }
 }
 
-func csvApmReceiverTestSetup() (context.Context, context.CancelFunc, *ConfigImpl) {
-  conf := NewTestConfig()
-  conf.timeseries_dir = os.Getenv("TEMP")
-  InitLogging(conf)
+func csvApmReceiverTestSetup() (context.Context, context.CancelFunc, *util.ConfigImpl) {
+  conf := util.NewTestConfig()
+  conf.TimeseriesDir_ = os.Getenv("TEMP")
+  util.InitLogging(conf)
   ctx, cancel := context.WithCancel(context.Background())
   return ctx, cancel, conf
 }
 
 func TestCsvApmRecieverListen(t *testing.T) {
   var err error
-  ctx, cancel, conf := apmProviderTestSetup()
+  ctx, cancel, conf := csvApmReceiverTestSetup()
   in_apm, expected_csv := fillApmsAndExpectedCsv(t)
 
   var done_ch <-chan bool

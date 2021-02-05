@@ -1,4 +1,4 @@
-package main
+package types
 
 import "context"
 import "time"
@@ -36,15 +36,15 @@ type ApmBucket interface {
 }
 
 type SingleAction struct {
-  millis_since uint
-  action_code ActionT
+  MillisSince_ uint
+  ActionCode_ ActionT
 }
 
-func (self *SingleAction) MillisSince() uint { return self.millis_since }
+func (self *SingleAction) MillisSince() uint { return self.MillisSince_ }
 func (self *SingleAction) DurationSince() time.Duration {
-  return time.Duration(self.millis_since) * time.Millisecond
+  return time.Duration(self.MillisSince_) * time.Millisecond
 }
-func (self *SingleAction) ActionCode() ActionT { return self.action_code }
+func (self *SingleAction) ActionCode() ActionT { return self.ActionCode_ }
 
 type EventProvider interface {
   Listen(ctx context.Context) (<-chan SingleAction, error)

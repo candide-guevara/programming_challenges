@@ -1,4 +1,4 @@
-package main
+package provider
 
 import "context"
 import "encoding/binary"
@@ -10,10 +10,13 @@ import "syscall"
 import "time"
 import "testing"
 
-func collectActionsFrom(expected_len int, in_ch <-chan SingleAction) <-chan []SingleAction {
-  ch := make(chan []SingleAction)
+import "apm_counter/types"
+import "apm_counter/util"
+
+func collectActionsFrom(expected_len int, in_ch <-chan types.SingleAction) <-chan []types.SingleAction {
+  ch := make(chan []types.SingleAction)
   go func() {
-    var actions []SingleAction
+    var actions []types.SingleAction
     for a := range in_ch {
       actions = append(actions, a)
       if len(actions) == expected_len { break }
@@ -24,7 +27,7 @@ func collectActionsFrom(expected_len int, in_ch <-chan SingleAction) <-chan []Si
   return ch
 }
 
-func pushInputData(t *testing.T, conf Config, pipe_path string) ([]SingleAction, <-chan bool) {
+func pushInputData(t *testing.T, conf types.Config, pipe_path string) ([]types.SingleAction, <-chan bool) {
   ch := make(chan bool)
   // Dummy config has rounded the date to seconds for simplicity
   dummy_time := conf.StartTime().Unix()
@@ -37,11 +40,11 @@ func pushInputData(t *testing.T, conf Config, pipe_path string) ([]SingleAction,
    {dummy_time + 4, 4, EV_KEY, BTN_LEFT, KeyReleaseCode},
    {dummy_time + 5, 5, EV_REL, REL_X, 0},
   }
-  expected_actions := []SingleAction{
-    {0, ActionKdb},
-    {2000, ActionMse},
-    {3000, ActionBtn},
-    {5000, ActionMse},
+  expected_actions := []types.SingleAction{
+    {0, types.ActionKdb},
+    {2000, types.ActionMse},
+    {3000, types.ActionBtn},
+    {5000, types.ActionMse},
   }
   go func() {
     file, err := os.OpenFile(pipe_path, os.O_WRONLY, 0666)
@@ -57,12 +60,12 @@ func pushInputData(t *testing.T, conf Config, pipe_path string) ([]SingleAction,
   return expected_actions, ch
 }
 
-func DevInputProviderTestSetup(pipe_path string) (context.Context, context.CancelFunc, Config) {
-  conf := NewTestConfig()
-  conf.dev_files = make([]string, 1)
-  conf.dev_files[0] = pipe_path
-  conf.ref_time = conf.StartTime().Truncate(time.Second)
-  InitLogging(conf)
+func DevInputProviderTestSetup(pipe_path string) (context.Context, context.CancelFunc, types.Config) {
+  conf := util.NewTestConfig()
+  conf.DevFiles_ = make([]string, 1)
+  conf.DevFiles_[0] = pipe_path
+  conf.RefTime_ = conf.StartTime().Truncate(time.Second)
+  util.InitLogging(conf)
   ctx, cancel := context.WithCancel(context.Background())
   return ctx, cancel, conf
 }
@@ -79,17 +82,17 @@ func createNamedPipe(t *testing.T) string {
   return pipe_path
 }
 
-func compareActions(t *testing.T, expected_actions []SingleAction, actions []SingleAction) {
+func compareActions(t *testing.T, expected_actions []types.SingleAction, actions []types.SingleAction) {
   if len(expected_actions) != len(actions) {
     t.Errorf("mismatched action count")
   }
   t.Logf("actions: %v", actions)
   t.Logf("expected_actions: %v", expected_actions)
   for idx,expect := range expected_actions {
-    if expect.millis_since != actions[idx].millis_since {
+    if expect.MillisSince() != actions[idx].MillisSince() {
       t.Errorf("mismatched action millis since")
     }
-    if expect.action_code != actions[idx].action_code {
+    if expect.ActionCode() != actions[idx].ActionCode() {
       t.Errorf("mismatched action code")
     }
   }
@@ -101,7 +104,7 @@ func TestDevInputProviderListen(t *testing.T) {
   defer os.Remove(pipe_path)
   ctx, cancel, conf := DevInputProviderTestSetup(pipe_path)
 
-  var in_ev <-chan SingleAction
+  var in_ev <-chan types.SingleAction
   prov := NewDevInputEventProvider(conf).(*devInputEventProvider)
   in_ev, err = prov.Listen(ctx)
   if err != nil { t.Fatalf("could not listen: %v", err) }

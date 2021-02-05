@@ -1,4 +1,4 @@
-package main
+package provider
 // Using /dev/input files to get events directly from kernel
 // * Event data format : https://www.kernel.org/doc/html/v4.12/input/input.html
 
@@ -11,6 +11,9 @@ import "io"
 import "os"
 import "sync"
 import "time"
+
+import "apm_counter/types"
+import "apm_counter/util"
 
 type perFileStats struct {
   err error
@@ -35,14 +38,14 @@ func (self *perFileStats) String() string {
 }
 
 type devInputEventProvider struct {
-  conf Config
+  conf types.Config
   ev_time_ref time.Time
   lastStrokeEvMillis uint
   wait_group *sync.WaitGroup
   stats []perFileStats
 }
 
-func NewDevInputEventProvider(conf Config) EventProvider {
+func NewDevInputEventProvider(conf types.Config) types.EventProvider {
   o := devInputEventProvider{
     conf,
     conf.StartTime(),
@@ -53,24 +56,24 @@ func NewDevInputEventProvider(conf Config) EventProvider {
   return &o
 }
 
-func (self *devInputEventProvider) linuxEvToSingleAction(ev *linuxInputEv) (SingleAction, bool) {
-  var action ActionT
+func (self *devInputEventProvider) linuxEvToSingleAction(ev *linuxInputEv) (types.SingleAction, bool) {
+  var action types.ActionT
   if ev.IsMseClick() {
-    action = ActionBtn
+    action = types.ActionBtn
   } else if ev.IsMseStroke() {
-    action = ActionMse
+    action = types.ActionMse
   } else if ev.IsAnyKeyPress() && !ev.IsModifierKey() {
-    action = ActionKdb
+    action = types.ActionKdb
   } else {
-    return SingleAction{}, false
+    return types.SingleAction{}, false
   }
-  return SingleAction {
+  return types.SingleAction {
     uint(ev.EvTime().Sub(self.ev_time_ref).Milliseconds()),
     action,
   }, true
 }
 
-func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, buf []byte, out chan<- SingleAction) uint {
+func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, buf []byte, out chan<- types.SingleAction) uint {
   const between_strokes_millis = 67
   var ev linuxInputEv
   var count uint = 0
@@ -82,24 +85,24 @@ func (self *devInputEventProvider) processDevInputEvents(ctx context.Context, bu
       if !errors.Is(err, io.EOF) { panic("marshalling should not fail") }
       break loop
     }
-    //Tracef("ev=%s", ev.String())
+    //util.Tracef("ev=%s", ev.String())
     data, valid := self.linuxEvToSingleAction(&ev)
     if !valid { continue }
-    if data.ActionCode() == ActionMse {
+    if data.ActionCode() == types.ActionMse {
       is_same_stroke := (data.MillisSince() - self.lastStrokeEvMillis) < between_strokes_millis
       self.lastStrokeEvMillis = data.MillisSince()
       if is_same_stroke { continue }
     }
     count += 1
     select {
-      case out <-data: //Tracef("ref_time=%v, data=%v", self.ev_time_ref, data)
+      case out <-data: //util.Tracef("ref_time=%v, data=%v", self.ev_time_ref, data)
       case <-ctx.Done(): break loop
     }
   }
   return count
 }
 
-func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, filepath string, out chan<- SingleAction) {
+func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, filepath string, out chan<- types.SingleAction) {
   const read_timeout = 50 * time.Millisecond
   defer self.wait_group.Done()
 
@@ -145,9 +148,9 @@ func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, fi
   self.stats[idx] = stat
 }
 
-func (self *devInputEventProvider) Listen(ctx context.Context) (<-chan SingleAction, error) {
+func (self *devInputEventProvider) Listen(ctx context.Context) (<-chan types.SingleAction, error) {
   dev_files := self.conf.DevicesToListenTo()
-  ch := make(chan SingleAction, 8)
+  ch := make(chan types.SingleAction, 8)
 
   for idx,filepath := range dev_files {
     // check the file exists first
@@ -161,9 +164,9 @@ func (self *devInputEventProvider) Listen(ctx context.Context) (<-chan SingleAct
     self.wait_group.Wait()
     for idx, stat := range self.stats {
       if stat.err != nil {
-        Errorf("Abnormal exit: %v", stat.err)
+        util.Errorf("Abnormal exit: %v", stat.err)
       }
-      Debugf("%s:%v", dev_files[idx], &stat)
+      util.Debugf("%s:%v", dev_files[idx], &stat)
     }
   }()
   return ch, nil

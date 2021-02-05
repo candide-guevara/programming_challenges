@@ -1,6 +1,6 @@
 // +build fiasco
 
-package fiasco
+package receiver
 
 // Not the best format to persist the data
 // * Arrow is not parquet (see https://arrow.apache.org/faq)
@@ -16,18 +16,21 @@ import "io"
 import "os"
 import fpmod "path/filepath"
 import "sync"
-/*
+
+import "apm_counter/types"
+import "apm_counter/util"
+
 import "github.com/apache/arrow/go/arrow"
 import "github.com/apache/arrow/go/arrow/array"
 import "github.com/apache/arrow/go/arrow/memory"
 import "github.com/apache/arrow/go/arrow/ipc"
-*/
+
 const (
   MillisSinceName = "OFF"
   MillisSinceIdx = 3
 )
 
-type Appender func(ApmBucket)
+type Appender func(types.ApmBucket)
 
 type arrowApmReceiverStats struct {
   err error
@@ -36,7 +39,7 @@ type arrowApmReceiverStats struct {
 }
 
 type arrowApmReceiver struct {
-  conf Config
+  conf types.Config
   file *os.File
   writer *ipc.FileWriter
   allocator memory.Allocator
@@ -45,7 +48,7 @@ type arrowApmReceiver struct {
   wait_group *sync.WaitGroup
 }
 
-func NewArrowApmReceiver(conf Config) ApmReceiver {
+func NewArrowApmReceiver(conf types.Config) types.ApmReceiver {
   return &arrowApmReceiver {
     conf,
     nil,
@@ -78,9 +81,9 @@ func (self *arrowApmReceiver) saveToDisk(record array.Record) (int64, error) {
 
 func (self *arrowApmReceiver) getDataSchema() *arrow.Schema {
   cols := []arrow.Field {
-    arrow.Field{Name:ActionKdb.Name(), Type:arrow.PrimitiveTypes.Uint16},
-    arrow.Field{Name:ActionMse.Name(), Type:arrow.PrimitiveTypes.Uint16},
-    arrow.Field{Name:ActionBtn.Name(), Type:arrow.PrimitiveTypes.Uint16},
+    arrow.Field{Name:types.ActionKdb.Name(), Type:arrow.PrimitiveTypes.Uint16},
+    arrow.Field{Name:types.ActionMse.Name(), Type:arrow.PrimitiveTypes.Uint16},
+    arrow.Field{Name:types.ActionBtn.Name(), Type:arrow.PrimitiveTypes.Uint16},
     arrow.Field{Name:MillisSinceName,  Type:arrow.PrimitiveTypes.Uint32},
   }
   ref_unix_secs := self.conf.StartTime().Unix()
@@ -95,30 +98,22 @@ func (self *arrowApmReceiver) getDataSchema() *arrow.Schema {
 
 func (self *arrowApmReceiver) getRecordBuilderAndAppender() (*array.RecordBuilder, Appender) {
   record_builder := array.NewRecordBuilder(self.allocator, self.schema)
-  kbd_builder := record_builder.Field(int(ActionKdb)).(*array.Uint16Builder)
-  mse_builder := record_builder.Field(int(ActionMse)).(*array.Uint16Builder)
-  btn_builder := record_builder.Field(int(ActionBtn)).(*array.Uint16Builder)
+  kbd_builder := record_builder.Field(int(types.ActionKdb)).(*array.Uint16Builder)
+  mse_builder := record_builder.Field(int(types.ActionMse)).(*array.Uint16Builder)
+  btn_builder := record_builder.Field(int(types.ActionBtn)).(*array.Uint16Builder)
   off_builder := record_builder.Field(MillisSinceIdx).(*array.Uint32Builder)
 
-  appender := func(apm ApmBucket) {
-    Tracef("apm=%v", apm)
-    kbd_builder.Append(uint16(apm.Count(ActionKdb)))
-    mse_builder.Append(uint16(apm.Count(ActionMse)))
-    btn_builder.Append(uint16(apm.Count(ActionBtn)))
+  appender := func(apm types.ApmBucket) {
+    util.Tracef("apm=%v", apm)
+    kbd_builder.Append(uint16(apm.Count(types.ActionKdb)))
+    mse_builder.Append(uint16(apm.Count(types.ActionMse)))
+    btn_builder.Append(uint16(apm.Count(types.ActionBtn)))
     off_builder.Append(uint32(apm.MillisSince()))
   }
   return record_builder, appender
 }
 
-func (self *arrowApmReceiver) createNewArrowFile() (*os.File, error) {
-  datestr := self.conf.StartTime().Format("02-01-2006-15-04")
-  filepath := fpmod.Join(self.conf.TimeseriesDir(),
-                         fmt.Sprintf("timeseries-%s.arrow", datestr))
-  file, err := os.Create(filepath)
-  return file, err
-}
-
-func (self *arrowApmReceiver) dumpToArrowFile(ctx context.Context, apm_chan <-chan ApmBucket) {
+func (self *arrowApmReceiver) dumpToArrowFile(ctx context.Context, apm_chan <-chan types.ApmBucket) {
   defer self.wait_group.Done()
   const flush_interval = 16
   flush_counter := 0
@@ -128,7 +123,7 @@ func (self *arrowApmReceiver) dumpToArrowFile(ctx context.Context, apm_chan <-ch
   loop:for {
     select {
       case apm,ok := <-apm_chan:
-        self.stats.err = ErrOnPrematureClosure(ctx, ok)
+        self.stats.err = util.ErrOnPrematureClosure(ctx, ok)
         if !ok { break loop }
         appender(apm)
         flush_counter += 1
@@ -144,11 +139,11 @@ func (self *arrowApmReceiver) dumpToArrowFile(ctx context.Context, apm_chan <-ch
   }
 }
 
-func (self *arrowApmReceiver) Listen(ctx context.Context, apm_chan <-chan ApmBucket) (<-chan bool, error) {
+func (self *arrowApmReceiver) Listen(ctx context.Context, apm_chan <-chan types.ApmBucket) (<-chan bool, error) {
   done_ch := make(chan bool)
   self.wait_group.Add(1)
 
-  self.file, self.stats.err = self.createNewArrowFile()
+  self.file, self.stats.err = util.CreateTimeserieFile(self.conf, "arrow")
   if self.stats.err != nil { return nil, self.stats.err }
   self.allocator = memory.NewGoAllocator()
   self.schema = self.getDataSchema()
@@ -164,16 +159,16 @@ func (self *arrowApmReceiver) Listen(ctx context.Context, apm_chan <-chan ApmBuc
     defer close(done_ch)
     self.wait_group.Wait()
     if self.stats.err != nil {
-      Errorf("Abnormal exit: %v", self.stats.err)
+      util.Errorf("Abnormal exit: %v", self.stats.err)
     }
     self.stats.err = self.writer.Close()
     if self.stats.err == nil {
       self.stats.err = self.file.Close()
     }
     if self.stats.err != nil {
-      Errorf("Could not close output file: %v", self.stats.err)
+      util.Errorf("Could not close output file: %v", self.stats.err)
     }
-    Debugf("%s", self.stats.String())
+    util.Debugf("%s", self.stats.String())
   }()
   return done_ch, nil
 }

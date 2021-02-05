@@ -1,13 +1,16 @@
-package main
+package provider
 
 import "context"
 import "time"
 import "testing"
 
-func collectBucketsFrom(expected_len int, in_ch <-chan ApmBucket) <-chan []ApmBucket {
-  ch := make(chan []ApmBucket, 1)
+import "apm_counter/types"
+import "apm_counter/util"
+
+func collectBucketsFrom(expected_len int, in_ch <-chan types.ApmBucket) <-chan []types.ApmBucket {
+  ch := make(chan []types.ApmBucket, 1)
   go func() {
-    var buckets []ApmBucket
+    var buckets []types.ApmBucket
     for b := range in_ch {
       buckets = append(buckets, b)
       if len(buckets) == expected_len { break }
@@ -18,7 +21,7 @@ func collectBucketsFrom(expected_len int, in_ch <-chan ApmBucket) <-chan []ApmBu
   return ch
 }
 
-func compareBuckets(t *testing.T, expected_buckets []apmBucketImpl, buckets []ApmBucket) {
+func compareBuckets(t *testing.T, expected_buckets []ApmBucketImpl, buckets []types.ApmBucket) {
   t.Logf("buckets: %v", buckets)
   t.Logf("expected_buckets: %v", expected_buckets)
   if len(expected_buckets) != len(buckets) {
@@ -27,8 +30,8 @@ func compareBuckets(t *testing.T, expected_buckets []apmBucketImpl, buckets []Ap
   }
   delta := buckets[0].MillisSince() - expected_buckets[0].MillisSince()
   for idx,expect := range expected_buckets {
-    real_bucket := buckets[idx].(*apmBucketImpl)
-    if expect.counts != real_bucket.counts {
+    real_bucket := buckets[idx].(*ApmBucketImpl)
+    if expect.Counts_ != real_bucket.Counts_ {
       t.Errorf("mismatched bucket count")
     }
     new_delta := real_bucket.MillisSince() - expect.MillisSince()
@@ -38,43 +41,43 @@ func compareBuckets(t *testing.T, expected_buckets []apmBucketImpl, buckets []Ap
   }
 }
 
-func fillBufferedActionChannel(conf Config) (chan SingleAction, []apmBucketImpl) {
+func fillBufferedActionChannel(conf types.Config) (chan types.SingleAction, []ApmBucketImpl) {
   period_millis := uint(conf.OuputPeriod().Milliseconds())
   // We rely on the fact the circular buffer is len=12 and the window_len=10
   // The followin actions will fill the first 3 buckets
   // However the third will immediately be decremented since it is the tail
-  actions := []SingleAction {
-    {0, ActionKdb},
-    {0, ActionMse},
-    {period_millis - 1, ActionKdb},
-    {period_millis + 1, ActionKdb},
-    {2*period_millis + 1, ActionKdb},
+  actions := []types.SingleAction {
+    {0, types.ActionKdb},
+    {0, types.ActionMse},
+    {period_millis - 1, types.ActionKdb},
+    {period_millis + 1, types.ActionKdb},
+    {2*period_millis + 1, types.ActionKdb},
   }
-  var expected_buckets []apmBucketImpl
+  var expected_buckets []ApmBucketImpl
   win_len := int(conf.WindowsDuration() / conf.OuputPeriod())
-  first_win_bucket := apmBucketImpl{bucketT{[ActionCnt]uint{3,1,0}}, 0}
+  first_win_bucket := ApmBucketImpl{BucketT{[types.ActionCnt]uint{3,1,0}}, 0}
   for i:=0; i<win_len; i++ {
-    first_win_bucket.millis_since = uint(i) * period_millis
+    first_win_bucket.MillisSince_ = uint(i) * period_millis
     expected_buckets = append(expected_buckets, first_win_bucket)
   }
-  bucket_millis := first_win_bucket.millis_since + period_millis
+  bucket_millis := first_win_bucket.MillisSince_ + period_millis
   expected_buckets = append(expected_buckets,
-                            apmBucketImpl{bucketT{[ActionCnt]uint{1,0,0}}, bucket_millis})
+                            ApmBucketImpl{BucketT{[types.ActionCnt]uint{1,0,0}}, bucket_millis})
   bucket_millis += period_millis
   expected_buckets = append(expected_buckets,
-                            apmBucketImpl{bucketT{[ActionCnt]uint{0,0,0}}, bucket_millis})
+                            ApmBucketImpl{BucketT{[types.ActionCnt]uint{0,0,0}}, bucket_millis})
 
-  ch := make(chan SingleAction, len(actions))
+  ch := make(chan types.SingleAction, len(actions))
   for _,a := range actions { ch <- a }
   return ch, expected_buckets
 }
 
-func apmProviderTestSetup() (context.Context, context.CancelFunc, *ConfigImpl) {
-  conf := NewTestConfig()
-  conf.ref_time = conf.StartTime().Truncate(time.Second)
-  conf.window_duration = 200 * time.Millisecond
-  conf.output_period   = 20 * time.Millisecond
-  InitLogging(conf)
+func apmProviderTestSetup() (context.Context, context.CancelFunc, *util.ConfigImpl) {
+  conf := util.NewTestConfig()
+  conf.RefTime_ = conf.StartTime().Truncate(time.Second)
+  conf.WindowDuration_ = 200 * time.Millisecond
+  conf.OutputPeriod_   = 20 * time.Millisecond
+  util.InitLogging(conf)
   ctx, cancel := context.WithCancel(context.Background())
   return ctx, cancel, conf
 }
@@ -84,7 +87,7 @@ func TestApmProvider(t *testing.T) {
   ctx, cancel, conf := apmProviderTestSetup()
   in_ev, expected_buckets := fillBufferedActionChannel(conf)
 
-  var in_apm <-chan ApmBucket
+  var in_apm <-chan types.ApmBucket
   apms := NewApmProvider(conf).(*apmProviderImpl)
   in_apm, err = apms.AggregateEvents(ctx, in_ev)
   if err != nil { t.Fatalf("could not aggregate actions: %v", err) }
@@ -113,9 +116,9 @@ func TestApmProvider(t *testing.T) {
 }
 
 func TestCheckForDelayInFilling(t *testing.T) {
-  conf := NewTestConfig()
-  conf.ref_time = conf.StartTime().Add(-10 * time.Millisecond)
-  action := SingleAction{ 0, ActionMse, }
+  conf := util.NewTestConfig()
+  conf.RefTime_ = conf.StartTime().Add(-10 * time.Millisecond)
+  action := types.SingleAction{ 0, types.ActionMse, }
   apms := NewApmProvider(conf).(*apmProviderImpl)
   delay := apms.checkForDelayInFilling(action)
   if delay - 10 > 1 {
@@ -125,7 +128,7 @@ func TestCheckForDelayInFilling(t *testing.T) {
 
 func TestCheckForDelayInCleaning(t *testing.T) {
   _,_,conf := apmProviderTestSetup()
-  conf.ref_time = time.Now().Add(-6 * conf.OuputPeriod())
+  conf.RefTime_ = time.Now().Add(-6 * conf.OuputPeriod())
   apms := NewApmProvider(conf).(*apmProviderImpl)
   new_tail := apms.checkForDelayInCleaning(4)
   if new_tail != 8 {

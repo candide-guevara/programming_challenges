@@ -45,8 +45,8 @@ $(GOENV): bin
 														 GOCACHE="$(STAGE_PATH)/go-build"
 	#GOENV="$(GOENV)" go env
 
-proto: $(SRC_GO)/proto/timeserie.go;
-$(SRC_GO)/proto/timeserie.go: $(SRC_PROTO)/timeserie.proto $(GOENV) | $(GO_PROTOC_INSTALL)
+proto: $(SRC_GO)/messages/timeserie.pb.go;
+$(SRC_GO)/messages/timeserie.pb.go: $(SRC_PROTO)/timeserie.proto $(GOENV) | $(GO_PROTOC_INSTALL)
 	export PATH="$(PATH):`GOENV="$(GOENV)" go env GOBIN`"
 	protoc '-I=$(SRC_PROTO)' '--go_out=$(SRC_GO)' "$<"
 

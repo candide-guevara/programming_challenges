@@ -1,4 +1,4 @@
-package fiasco
+package provider
 
 // Using xlib to intercept X11 events
 // * https://www.x.org/releases/X11R7.7/doc/libX11/libX11/libX11.html#Event_Handling_Functions

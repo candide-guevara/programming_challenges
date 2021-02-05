@@ -1,11 +1,13 @@
-package main
+package receiver
 
 import "context"
 import "fmt"
 import "io"
 import "os"
-import fpmod "path/filepath"
 import "sync"
+
+import "apm_counter/types"
+import "apm_counter/util"
 
 type csvApmReceiverStats struct {
   err error
@@ -14,12 +16,12 @@ type csvApmReceiverStats struct {
 }
 
 type csvApmReceiver struct {
-  conf Config
+  conf types.Config
   stats csvApmReceiverStats
   wait_group *sync.WaitGroup
 }
 
-func NewCsvApmReceiver(conf Config) ApmReceiver {
+func NewCsvApmReceiver(conf types.Config) types.ApmReceiver {
   return &csvApmReceiver {
     conf,
     csvApmReceiverStats{},
@@ -38,14 +40,12 @@ func (self *csvApmReceiverStats) String() string {
 }
 
 func (self *csvApmReceiver) createNewCvsFile() (*os.File, error) {
-  datestr := self.conf.StartTime().Format("02-01-2006-15-04")
-  filepath := fpmod.Join(self.conf.TimeseriesDir(),
-                         fmt.Sprintf("timeseries-%s.csv", datestr))
-  self.stats.filepath = filepath
-  file, err := os.Create(filepath)
+  file, err := util.CreateTimeserieFile(self.conf, "csv")
   if err == nil {
     header := fmt.Sprintf("%s,%s,%s\n",
-                          ActionKdb.Name(), ActionMse.Name(), ActionBtn.Name())
+                          types.ActionKdb.Name(),
+                          types.ActionMse.Name(),
+                          types.ActionBtn.Name())
     if _,err := file.WriteString(header); err != nil {
       file.Close()
     }
@@ -53,22 +53,25 @@ func (self *csvApmReceiver) createNewCvsFile() (*os.File, error) {
   return file, err
 }
 
-func (self *csvApmReceiver) dumpToCvsFile(ctx context.Context, apm_chan <-chan ApmBucket) {
+func (self *csvApmReceiver) dumpToCvsFile(ctx context.Context, apm_chan <-chan types.ApmBucket) {
   defer self.wait_group.Done()
 
   var file *os.File
   file, self.stats.err = self.createNewCvsFile()
   if self.stats.err != nil { return }
+  self.stats.filepath = file.Name()
   defer file.Close()
 
   loop:for {
     select {
       case apm,ok := <-apm_chan:
-        self.stats.err = ErrOnPrematureClosure(ctx, ok)
+        self.stats.err = util.ErrOnPrematureClosure(ctx, ok)
         if !ok { break loop }
-        //Tracef("apm=%v", apm)
+        //util.Tracef("apm=%v", apm)
         line := fmt.Sprintf("%d,%d,%d\n",
-                            apm.Count(ActionKdb), apm.Count(ActionMse), apm.Count(ActionBtn))
+                            apm.Count(types.ActionKdb),
+                            apm.Count(types.ActionMse),
+                            apm.Count(types.ActionBtn))
         _,self.stats.err = file.WriteString(line)
         if self.stats.err != nil { break loop }
       case <-ctx.Done(): break loop
@@ -79,7 +82,7 @@ func (self *csvApmReceiver) dumpToCvsFile(ctx context.Context, apm_chan <-chan A
   }
 }
 
-func (self *csvApmReceiver) Listen(ctx context.Context, apm_chan <-chan ApmBucket) (<-chan bool, error) {
+func (self *csvApmReceiver) Listen(ctx context.Context, apm_chan <-chan types.ApmBucket) (<-chan bool, error) {
   done_ch := make(chan bool)
   self.wait_group.Add(1)
   if _,err := os.Stat(self.conf.TimeseriesDir()); err != nil { return nil, err }
@@ -90,9 +93,9 @@ func (self *csvApmReceiver) Listen(ctx context.Context, apm_chan <-chan ApmBucke
     defer close(done_ch)
     self.wait_group.Wait()
     if self.stats.err != nil {
-      Errorf("Abnormal exit: %v", self.stats.err)
+      util.Errorf("Abnormal exit: %v", self.stats.err)
     }
-    Debugf("%s", self.stats.String())
+    util.Debugf("%s", self.stats.String())
   }()
   return done_ch, nil
 }
