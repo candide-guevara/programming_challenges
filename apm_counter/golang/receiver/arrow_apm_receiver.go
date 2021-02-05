@@ -14,7 +14,6 @@ import "context"
 import "fmt"
 import "io"
 import "os"
-import fpmod "path/filepath"
 import "sync"
 
 import "apm_counter/types"
