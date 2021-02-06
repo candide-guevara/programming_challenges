@@ -14,7 +14,6 @@ import "context"
 import "fmt"
 import "io"
 import "os"
-import "sync"
 
 import "apm_counter/types"
 import "apm_counter/util"
@@ -31,42 +30,21 @@ const (
 
 type Appender func(types.ApmBucket)
 
-type arrowApmReceiverStats struct {
-  err error
-  filepath string
-  filesize int64
-}
-
 type arrowApmReceiver struct {
-  conf types.Config
   file *os.File
   writer *ipc.FileWriter
   allocator memory.Allocator
   schema *arrow.Schema
-  stats arrowApmReceiverStats
-  wait_group *sync.WaitGroup
 }
 
 func NewArrowApmReceiver(conf types.Config) types.ApmReceiver {
   return &arrowApmReceiver {
-    conf,
+    *newBaseApmReceiver(conf),
     nil,
     nil,
     nil,
     nil,
-    arrowApmReceiverStats{},
-    new(sync.WaitGroup),
   }
-}
-
-func (self *arrowApmReceiverStats) String() string {
-  return fmt.Sprintf(`
-  filepath = '%s'
-  filesize = %.2e
-  err      = '%v'`,
-  self.filepath,
-  float32(self.filesize),
-  self.err)
 }
 
 func (self *arrowApmReceiver) saveToDisk(record array.Record) (int64, error) {

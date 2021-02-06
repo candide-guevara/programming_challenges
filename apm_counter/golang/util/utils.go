@@ -1,10 +1,7 @@
 package util
 
-import "compress/gzip"
 import "context"
-import "encoding/binary"
 import "fmt"
-import "io"
 import "os"
 import "os/signal"
 import fpmod "path/filepath"
@@ -12,7 +9,6 @@ import "reflect"
 import "time"
 
 import "apm_counter/types"
-import "google.golang.org/protobuf/proto"
 
 func WaitForClosureReflection(wait_for_millis uint, chs ... interface{}) error {
   Infof("Context done, waiting for channels close")
@@ -72,46 +68,5 @@ func CreateTimeserieFilename(conf types.Config, extension string) string {
 func CreateTimeserieFile(conf types.Config, extension string) (*os.File, error) {
   file, err := os.Create(CreateTimeserieFilename(conf, extension))
   return file, err
-}
-
-type FileZipWriter struct {
-  file *os.File
-  zip_writer *gzip.Writer
-}
-
-func NewFileZipWriter(filepath string) (*FileZipWriter, error) {
-  var err error
-  var writer FileZipWriter
-  writer.file, err = os.Create(filepath)
-  if err != nil { return nil, err }
-  writer.zip_writer = gzip.NewWriter(writer.file)
-  return &writer, nil
-}
-
-func (self *FileZipWriter) Close() error {
-  var err error
-  if self.zip_writer != nil { err = self.zip_writer.Close() }
-  if err != nil && self.file != nil { err = self.file.Close() }
-  return err
-}
-
-func (self *FileZipWriter) Write(buf []byte) (int, error) {
-  if self.zip_writer != nil {
-    return self.zip_writer.Write(buf)
-  }
-  return 0, fmt.Errorf("zip_writer is nil")
-}
-
-// https://developers.google.com/protocol-buffers/docs/techniques#streaming
-func WriteProtoWithPrefixedLen(writer io.Writer, msg proto.Message) (int, error) {
-  var err error
-  var buf []byte
-  var written int
-  buf, err = proto.Marshal(msg)
-  if err != nil { return 0, err }
-  err = binary.Write(writer, binary.LittleEndian, uint32(len(buf)))
-  if err != nil { return 0, err }
-  written, err = writer.Write(buf)
-  return written+4, err
 }
 

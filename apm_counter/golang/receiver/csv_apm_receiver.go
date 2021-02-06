@@ -4,39 +4,16 @@ import "context"
 import "fmt"
 import "io"
 import "os"
-import "sync"
 
 import "apm_counter/types"
 import "apm_counter/util"
 
-type csvApmReceiverStats struct {
-  err error
-  filepath string
-  filesize int64
-}
-
 type csvApmReceiver struct {
-  conf types.Config
-  stats csvApmReceiverStats
-  wait_group *sync.WaitGroup
+  baseApmReceiver
 }
 
 func NewCsvApmReceiver(conf types.Config) types.ApmReceiver {
-  return &csvApmReceiver {
-    conf,
-    csvApmReceiverStats{},
-    new(sync.WaitGroup),
-  }
-}
-
-func (self *csvApmReceiverStats) String() string {
-  return fmt.Sprintf(`
-  filepath = '%s'
-  filesize = %.2e
-  err      = '%v'`,
-  self.filepath,
-  float32(self.filesize),
-  self.err)
+  return &csvApmReceiver { *newBaseApmReceiver(conf) }
 }
 
 func (self *csvApmReceiver) createNewCvsFile() (*os.File, error) {
