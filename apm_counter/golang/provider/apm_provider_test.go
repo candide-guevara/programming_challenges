@@ -42,7 +42,7 @@ func compareBuckets(t *testing.T, expected_buckets []ApmBucketImpl, buckets []ty
 }
 
 func fillBufferedActionChannel(conf types.Config) (chan types.SingleAction, []ApmBucketImpl) {
-  period_millis := uint(conf.OuputPeriod().Milliseconds())
+  period_millis := uint(conf.OutputPeriod().Milliseconds())
   // We rely on the fact the circular buffer is len=12 and the window_len=10
   // The followin actions will fill the first 3 buckets
   // However the third will immediately be decremented since it is the tail
@@ -54,7 +54,7 @@ func fillBufferedActionChannel(conf types.Config) (chan types.SingleAction, []Ap
     {2*period_millis + 1, types.ActionKdb},
   }
   var expected_buckets []ApmBucketImpl
-  win_len := int(conf.WindowsDuration() / conf.OuputPeriod())
+  win_len := int(conf.WindowsDuration() / conf.OutputPeriod())
   first_win_bucket := ApmBucketImpl{BucketT{[types.ActionCnt]uint{3,1,0}}, 0}
   for i:=0; i<win_len; i++ {
     first_win_bucket.MillisSince_ = uint(i) * period_millis
@@ -93,7 +93,7 @@ func TestApmProvider(t *testing.T) {
   if err != nil { t.Fatalf("could not aggregate actions: %v", err) }
 
   out_buckets := collectBucketsFrom(len(expected_buckets), in_apm)
-  test_duration := time.Duration(len(expected_buckets)) * conf.OuputPeriod()
+  test_duration := time.Duration(len(expected_buckets)) * conf.OutputPeriod()
   test_duration += 10 * time.Millisecond
 
   select {
@@ -128,7 +128,7 @@ func TestCheckForDelayInFilling(t *testing.T) {
 
 func TestCheckForDelayInCleaning(t *testing.T) {
   _,_,conf := apmProviderTestSetup()
-  conf.RefTime_ = time.Now().Add(-6 * conf.OuputPeriod())
+  conf.RefTime_ = time.Now().Add(-6 * conf.OutputPeriod())
   apms := NewApmProvider(conf).(*apmProviderImpl)
   new_tail := apms.checkForDelayInCleaning(4)
   if new_tail != 8 {

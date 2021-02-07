@@ -22,7 +22,7 @@ func (self *ConfigImpl) DevicesToListenTo() []string { return self.DevFiles_ }
 func (self *ConfigImpl) TimeseriesDir() string { return self.TimeseriesDir_ }
 func (self *ConfigImpl) StartTime() time.Time { return self.RefTime_ }
 func (self *ConfigImpl) WindowsDuration() time.Duration { return self.WindowDuration_ }
-func (self *ConfigImpl) OuputPeriod() time.Duration { return self.OutputPeriod_ }
+func (self *ConfigImpl) OutputPeriod() time.Duration { return self.OutputPeriod_ }
 func (self *ConfigImpl) LogLevel() types.LogT { return self.LogLevel_ }
 func (self *ConfigImpl) AoeUserDir() string {
   return filepath.Join(self.SteamDir_, self.AoeUserDir_)

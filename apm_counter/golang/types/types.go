@@ -69,7 +69,7 @@ type Config interface {
   AoeUserDir() string
   StartTime() time.Time
   WindowsDuration() time.Duration
-  OuputPeriod() time.Duration
+  OutputPeriod() time.Duration
   LogLevel() LogT
   String() string
 }

@@ -86,15 +86,15 @@ func (self *apmProviderStats) String() string {
 }
 
 func NewApmProvider(conf types.Config) types.ApmProvider {
-  if conf.WindowsDuration() % conf.OuputPeriod() != 0 {
+  if conf.WindowsDuration() % conf.OutputPeriod() != 0 {
     panic("Output period must be multiple of a minute")
   }
-  buckets_per_min := conf.WindowsDuration() / conf.OuputPeriod()
+  buckets_per_min := conf.WindowsDuration() / conf.OutputPeriod()
   return &apmProviderImpl{
     conf,
     conf.StartTime(),
     uint(conf.WindowsDuration().Milliseconds()),
-    uint(conf.OuputPeriod().Milliseconds()),
+    uint(conf.OutputPeriod().Milliseconds()),
     // zero initialized ?
     make([]BucketT, (12 * buckets_per_min / 10)),
     BucketT{},

@@ -24,7 +24,7 @@ func (self *protoApmReceiver) buildBlankTimeserie(conf types.Config) messages.Ti
   ts.Metadata = &messages.Timeserie_Metadata {
     RefSecs: conf.StartTime().Unix(),
     RefNanos: conf.StartTime().UnixNano(),
-    PeriodMillis: uint32(conf.OuputPeriod().Milliseconds()),
+    PeriodMillis: uint32(conf.OutputPeriod().Milliseconds()),
   }
   ts.OffsetMillis = make([]uint32, self.batch_size)
   ts.KbdCount     = make([]uint32, self.batch_size)
