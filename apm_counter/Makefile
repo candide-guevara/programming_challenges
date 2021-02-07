@@ -1,6 +1,6 @@
 .ONESHELL:
 .SECONDARY:
-.PHONY: all clean fs_init go_code py_code proto go_unittest py_unittest test
+.PHONY: all clean fs_init go_code py_code proto sh_unittest go_unittest py_unittest test
 
 STAGE_PATH := /tmp/bin_apm_counter
 STAGE_PY   := $(STAGE_PATH)/python
@@ -8,6 +8,7 @@ GOENV      := $(STAGE_PATH)/go_env
 PY_VENV    := $(STAGE_PATH)/py_venv
 SRC_GO     := golang
 SRC_PY     := python
+SRC_SH     := etc
 SRC_PROTO  := proto
 GO_PROTOC_INSTALL := $(STAGE_PATH)/gobin/protoc-gen-go
 
@@ -28,7 +29,7 @@ clean:
 	fi
 	[[ -d "$(STAGE_PATH)" ]] && rm -rf "$(STAGE_PATH)"/*
 
-test: all go_unittest py_unittest;
+test: all go_unittest py_unittest sh_unittest;
 
 go_code: $(GOENV)
 	pushd "$(SRC_GO)"
@@ -36,6 +37,10 @@ go_code: $(GOENV)
 
 py_code: | $(PY_VENV)
 	cp --recursive --update "$(SRC_PY)" "$(STAGE_PATH)"
+
+sh_unittest:
+	pushd "$(SRC_SH)"
+	sudo bash sandbox_test.sh
 
 go_unittest: go_code
 	pushd "$(SRC_GO)"
