@@ -16,3 +16,12 @@ message Timeserie {
   repeated uint32 btn_count = 5;
 }
 
+message TimeserieRepo {
+  message Entry {
+    string filepath = 1;
+    int64 start_secs = 2;
+    int64 end_secs = 3;
+  }
+  repeated Entry entries = 1;
+}
+

@@ -25,6 +25,11 @@ func newBaseApmReceiver(conf types.Config) *baseApmReceiver {
   }
 }
 
+func (self *baseApmReceiver) Filepath() string {
+  if len(self.stats.filepath) == 0 { panic("Filepath has not been created yet") }
+  return self.stats.filepath
+}
+
 func (self *fileApmReceiverStats) String() string {
   return fmt.Sprintf(`
   filepath = '%s'

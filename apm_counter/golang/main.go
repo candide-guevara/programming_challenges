@@ -26,7 +26,7 @@ func main() {
   if err != nil { util.Fatalf("fiasco : %v", err) }
 
   var recv_done <-chan bool
-  recv := receiver.NewProtoApmReceiver(conf)
+  recv := receiver.NewProtoApmReceiverDbWrapper(conf)
   recv_done, err = recv.Listen(ctx, in_apm)
   if err != nil { util.Fatalf("fiasco : %v", err) }
 

@@ -66,6 +66,7 @@ type TimeseriesDb interface {
 type Config interface {
   DevicesToListenTo() []string
   TimeseriesDir() string
+  TimeserieRepo() string
   AoeUserDir() string
   StartTime() time.Time
   WindowsDuration() time.Duration

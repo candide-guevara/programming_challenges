@@ -1,7 +1,6 @@
 package receiver
 
 import "context"
-import "os"
 
 import "apm_counter/messages"
 import "apm_counter/types"
@@ -51,14 +50,8 @@ func (self *protoApmReceiver) truncateTimeserie(ts *messages.Timeserie, size int
   ts.BtnCount     = ts.BtnCount[0:size]
 }
 
-func (self *protoApmReceiver) dumpToProtoStream(ctx context.Context, apm_chan <-chan types.ApmBucket) {
+func (self *protoApmReceiver) dumpToProtoStream(ctx context.Context, writer *util.FileZipWriter, apm_chan <-chan types.ApmBucket) {
   defer self.wait_group.Done()
-
-  var writer *util.FileZipWriter
-  self.stats.filepath = util.CreateTimeserieFilename(self.conf, "pb.gz")
-  writer, self.stats.err = util.NewFileZipWriter(self.stats.filepath)
-  if self.stats.err != nil { return }
-  defer writer.Close()
   ts := self.buildBlankTimeserie(self.conf)
 
   var idx, cnt int
@@ -94,13 +87,18 @@ func (self *protoApmReceiver) dumpToProtoStream(ctx context.Context, apm_chan <-
 func (self *protoApmReceiver) Listen(ctx context.Context, apm_chan <-chan types.ApmBucket) (<-chan bool, error) {
   done_ch := make(chan bool)
   self.wait_group.Add(1)
-  if _,err := os.Stat(self.conf.TimeseriesDir()); err != nil { return nil, err }
+  self.stats.filepath = util.CreateTimeserieFilename(self.conf, "pb.gz")
+  writer, err := util.NewFileZipWriter(self.stats.filepath)
+  if err != nil { return nil, err }
 
-  go self.dumpToProtoStream(ctx, apm_chan)
+  go self.dumpToProtoStream(ctx, writer, apm_chan)
 
   go func() {
     defer close(done_ch)
     self.wait_group.Wait()
+    if err := writer.Close(); err != nil {
+      util.Errorf("Failed to close: %v", err)
+    }
     if self.stats.err != nil {
       util.Errorf("Abnormal exit: %v", self.stats.err)
     }

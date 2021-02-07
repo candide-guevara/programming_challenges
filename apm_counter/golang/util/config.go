@@ -1,7 +1,7 @@
 package util
 
 import "fmt"
-import "path/filepath"
+import fpmod "path/filepath"
 import "os"
 import "time"
 
@@ -25,7 +25,10 @@ func (self *ConfigImpl) WindowsDuration() time.Duration { return self.WindowDura
 func (self *ConfigImpl) OutputPeriod() time.Duration { return self.OutputPeriod_ }
 func (self *ConfigImpl) LogLevel() types.LogT { return self.LogLevel_ }
 func (self *ConfigImpl) AoeUserDir() string {
-  return filepath.Join(self.SteamDir_, self.AoeUserDir_)
+  return fpmod.Join(self.SteamDir_, self.AoeUserDir_)
+}
+func (self *ConfigImpl) TimeserieRepo() string {
+  return fpmod.Join(self.TimeseriesDir_, "timeserie_repo.pb.gz")
 }
 
 func (self *ConfigImpl) String() string {

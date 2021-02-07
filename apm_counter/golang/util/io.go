@@ -5,6 +5,7 @@ import "encoding/binary"
 import "errors"
 import "fmt"
 import "io"
+import "io/ioutil"
 import "os"
 
 import "google.golang.org/protobuf/proto"
@@ -102,5 +103,27 @@ func ReadProtoWithPrefixedLen(reader io.Reader, msg proto.Message) (int, error) 
 
   err = proto.Unmarshal(buf, msg)
   return read+4, err
+}
+
+func ReadProtoFromZipFile(filepath string, msg proto.Message) error {
+  var buf []byte
+  reader, err := NewFileZipReader(filepath)
+  if err != nil { return err }
+  defer reader.Close()
+
+  buf, err = ioutil.ReadAll(reader)
+  if err != nil { return err }
+  err = proto.Unmarshal(buf, msg)
+  return err
+}
+
+func WriteProtoIntoZipFile(filepath string, msg proto.Message) error {
+  var buf []byte
+  writer, err := NewFileZipWriter(filepath)
+  if err != nil { return err }
+  defer writer.Close()
+  buf, err = proto.Marshal(msg)
+  _, err = writer.Write(buf)
+  return err
 }
 
