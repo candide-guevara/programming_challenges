@@ -59,7 +59,7 @@ $(GOENV): | $(STAGE_PATH)
 proto: $(STAGE_PY)/timeserie_pb2.py $(SRC_GO)/messages/timeserie.pb.go;
 $(STAGE_PY)/timeserie_pb2.py $(SRC_GO)/messages/timeserie.pb.go &: $(SRC_PROTO)/timeserie.proto $(GOENV) \
                                                                  | $(GO_PROTOC_INSTALL) \
-																																 | $(PY_VENV)
+																																   $(PY_VENV)
 	export PATH="$(PATH):`GOENV="$(GOENV)" go env GOBIN`"
 	protoc '-I=$(SRC_PROTO)' '--go_out=$(SRC_GO)' "$<"
 	protoc '-I=$(SRC_PROTO)' '--python_out=$(STAGE_PY)' "$<"

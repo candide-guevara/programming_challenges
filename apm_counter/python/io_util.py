@@ -1,3 +1,4 @@
+import datetime as dt
 import gzip
 import numpy as np
 import pandas as pd
@@ -57,14 +58,52 @@ def allocate_and_copy(size, ro_index, ro_data):
 def df_from_nparray(index, data):
   return pd.DataFrame(data=data, index=index, columns=DATA_COLS)
 
-def read_df_from_timeserie_gz(filepath):
+# Be careful it is a trap !
+# Comparison between datetime64 of different units is undefined
+# np.datetime64(333, 'ms') > np.datetime64(np.iinfo(np.int64).max, 's' is True !
+def millis_to_dt(millis, ts_start=None):
+  if not ts_start:
+    ts_start = np.datetime64(0, 'ms')
+  return ts_start + np.timedelta64(millis, 'ms')
+
+def millis_to_delta(millis):
+  return np.timedelta64(millis, 'ms')
+
+def dt_delta(upper_dt, lower_dt):
+  if upper_dt < lower_dt: return np.timedelta64(0, 'ms')
+  return upper_dt - lower_dt
+
+def adjust_bounds_to_time(index, ts_start, lower_dt, upper_dt):
+  lower_delta = dt_delta(lower_dt, ts_start)
+  upper_delta = dt_delta(upper_dt, ts_start)
+  lower,upper = np.searchsorted(index, [lower_delta, upper_delta])
+  return max(0,lower), min(upper,len(index))
+
+def metadata_start_dt(ts):
+  return millis_to_dt(ts.metadata.ref_secs * 1000)
+
+def read_df_from_timeserie_gz_between(filepath, lower_dt, upper_dt):
   cur_size = 0
   read_it = timeserie_gz_read_iterator(filepath)
   index,data = allocate_and_copy(20000, None, None)
+  ts_start = None
+
   for ts in read_it:
+    if ts.metadata:
+      ts_start = metadata_start_dt(ts)
     if (cur_size + len(ts.offset_millis)) > len(index):
-      index,data = allocate_and_copy(20000, index, data)
+      index,data = allocate_and_copy(cur_size * 2, index, data)
+
+    if millis_to_dt(ts.offset_millis[0] , ts_start) > upper_dt: break
+    if millis_to_dt(ts.offset_millis[-1], ts_start) < lower_dt: continue
+
     write_ts_to_np_array(cur_size, index, data, ts)
     cur_size += len(ts.offset_millis)
-  return df_from_nparray(index[0:cur_size], data[0:cur_size])
+  lower,upper = adjust_bounds_to_time(index[0:cur_size], ts_start, lower_dt, upper_dt)
+  return df_from_nparray(index[lower:upper], data[lower:upper])
+
+def read_df_from_timeserie_gz(filepath):
+  lower_dt = millis_to_dt(0)
+  upper_dt = millis_to_dt(np.iinfo(np.int64).max)
+  return read_df_from_timeserie_gz_between(filepath, lower_dt, upper_dt)
 

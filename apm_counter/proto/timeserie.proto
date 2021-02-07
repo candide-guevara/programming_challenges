@@ -6,6 +6,7 @@ message Timeserie {
   message Metadata {
     int64 ref_secs = 1;
     int64 ref_nanos = 2;
+    uint32 period_millis = 3;
   }
   // Only filled for the first message in the stream
   Metadata metadata = 1;

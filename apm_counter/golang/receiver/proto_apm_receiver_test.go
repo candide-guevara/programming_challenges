@@ -34,6 +34,7 @@ func fillApmsAndExpectedProtoMultiBatch(t *testing.T, conf types.Config, batch_s
       expected_pb.Metadata = &messages.Timeserie_Metadata {
         RefSecs: conf.StartTime().Unix(),
         RefNanos: conf.StartTime().UnixNano(),
+        PeriodMillis: uint32(conf.OuputPeriod().Milliseconds()),
       }
     }
     for j:=0; j<batch_size; j++ {
@@ -58,6 +59,7 @@ func fillApmsAndExpectedProto(t *testing.T, conf types.Config) (chan types.ApmBu
     Metadata: &messages.Timeserie_Metadata {
       RefSecs: conf.StartTime().Unix(),
       RefNanos: conf.StartTime().UnixNano(),
+      PeriodMillis: uint32(conf.OuputPeriod().Milliseconds()),
     },
     OffsetMillis: []uint32{10, 20, 30, 40},
     KbdCount:     []uint32{0, 3, 2, 2},
