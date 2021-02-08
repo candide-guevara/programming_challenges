@@ -1,6 +1,7 @@
 package provider
 
 import "context"
+import "math"
 import "time"
 import "testing"
 
@@ -28,15 +29,22 @@ func compareBuckets(t *testing.T, expected_buckets []ApmBucketImpl, buckets []ty
     t.Errorf("mismatched buckets len")
     return
   }
-  delta := buckets[0].MillisSince() - expected_buckets[0].MillisSince()
+  is_close := func(a, b types.ApmBucket) bool {
+    delta := int64(buckets[0].MillisSince()) - int64(expected_buckets[0].MillisSince())
+    diff := int64(a.MillisSince()) - int64(b.MillisSince())
+    if diff < 0 { diff = -diff }
+    if delta < 0 { delta = -delta }
+    //t.Logf("diff=%d / delta=%d", diff, delta)
+    return math.Abs(float64(diff - delta)) < 0.1 * float64(delta)
+  }
   for idx,expect := range expected_buckets {
     real_bucket := buckets[idx].(*ApmBucketImpl)
     if expect.Counts_ != real_bucket.Counts_ {
       t.Errorf("mismatched bucket count")
     }
-    new_delta := real_bucket.MillisSince() - expect.MillisSince()
-    if new_delta != delta {
-      t.Errorf("mismatched bucket time")
+    if !is_close(real_bucket, &expect) {
+      t.Errorf("mismatched bucket time %d: %d - %d ?",
+               idx, real_bucket.MillisSince(), expect.MillisSince())
     }
   }
 }

@@ -117,7 +117,7 @@ func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, fi
   defer read_tick.Stop()
 
   file, stat.err = os.Open(filepath)
-  if stat.err != nil { return }
+  if stat.err != nil { goto fiasco }
   defer file.Close()
 
   loop:for ctx.Err() == nil {
@@ -145,7 +145,7 @@ func (self *devInputEventProvider) listenToFile(ctx context.Context, idx int, fi
       case <-ctx.Done(): break loop
     }
   }
-  self.stats[idx] = stat
+  fiasco: self.stats[idx] = stat
 }
 
 func (self *devInputEventProvider) Listen(ctx context.Context) (<-chan types.SingleAction, error) {

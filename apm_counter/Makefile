@@ -86,6 +86,7 @@ $(PY_VENV): | $(STAGE_PATH)
 	pip install --quiet matplotlib
 	pip install --quiet pyqt5
 	pip install --quiet protobuf
+	pip install --quiet mgz
 	pip list
 
 $(GO_PROTOC_INSTALL): $(GOENV)

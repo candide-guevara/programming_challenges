@@ -62,7 +62,7 @@ func (self *csvApmReceiver) dumpToCvsFile(ctx context.Context, apm_chan <-chan t
 func (self *csvApmReceiver) Listen(ctx context.Context, apm_chan <-chan types.ApmBucket) (<-chan bool, error) {
   done_ch := make(chan bool)
   self.wait_group.Add(1)
-  if _,err := os.Stat(self.conf.TimeseriesDir()); err != nil { return nil, err }
+  if _,err := os.Stat(self.conf.TimeserieDir()); err != nil { return nil, err }
 
   go self.dumpToCvsFile(ctx, apm_chan)
 

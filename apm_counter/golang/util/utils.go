@@ -60,7 +60,7 @@ func ErrOnPrematureClosure(ctx context.Context, read_stx bool) error {
 
 func CreateTimeserieFilename(conf types.Config, extension string) string {
   datestr := conf.StartTime().Format("02-01-2006-15-04")
-  filepath := fpmod.Join(conf.TimeseriesDir(),
+  filepath := fpmod.Join(conf.TimeserieDir(),
                          fmt.Sprintf("timeseries-%s.%s", datestr, extension))
   return filepath
 }

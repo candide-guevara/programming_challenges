@@ -92,7 +92,7 @@ func compareFileContentToProto(t *testing.T, filepath string, expected_pbs []*me
 
 func protoApmReceiverTestSetup() (context.Context, context.CancelFunc, *util.ConfigImpl) {
   conf := util.NewTestConfig()
-  conf.TimeseriesDir_ = os.Getenv("TEMP")
+  conf.TimeserieDir_ = os.Getenv("TEMP")
   util.InitLogging(conf)
   ctx, cancel := context.WithCancel(context.Background())
   return ctx, cancel, conf
