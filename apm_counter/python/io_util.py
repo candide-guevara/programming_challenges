@@ -1,12 +1,23 @@
 import datetime as dt
 import gzip
 import numpy as np
+import os
 import pandas as pd
 import struct
 
 import timeserie_pb2
 
 DATA_COLS = ['kbd', 'mse', 'btn']
+
+def serialize_to_gz_file(filepath, proto):
+  with gzip.open(filepath, mode='wb') as fobj:
+    fobj.write(proto.SerializeToString())
+
+def parse_from_gz_file(filepath, proto):
+  if not os.path.exists(filepath): return proto
+  with gzip.open(filepath) as fobj:
+    proto.ParseFromString(fobj.read())
+    return proto
 
 def timeserie_gz_read_iterator(filepath):
   with gzip.open(filepath) as fobj:

@@ -1,0 +1,60 @@
+syntax = "proto3";
+package messages;
+option go_package = "./messages";
+
+message ReplayRepo {
+  message Replay {
+    string filepath = 1;
+    string details = 2;
+    string timeserie = 3;
+    int64 start_secs = 4;
+    int64 end_secs = 5;
+  }
+  repeated Replay replays = 1;
+}
+
+message GameDetails {
+  message Action {
+    // Uses game time (divide by speed to get wall clock time)
+    uint32 offset_millis = 1;
+    uint32 type = 2;
+    uint32 amount = 3;
+    uint32 tech_id = 4;
+    uint32 unit_type = 5;
+    uint32 building_type = 6;
+  }
+  message Player {
+    string name = 1;
+    uint32 civ_id = 2;
+    repeated Action actions = 5;
+  }
+  string map_name = 1;
+  uint32 map_size = 2;
+  float game_speed = 3;
+  uint32 duration_millis = 4;
+  repeated Player players = 6;
+}
+
+enum BuildingType {
+  UNKNOWN = 0;
+  TOWNCENTER = 109;
+}
+enum UnitType {
+  UNKNOWN = 0;
+  VILLAGER = 83;
+}
+enum TechId {
+  UNKNOWN = 0;
+  FEUDAL_AGE = 101;
+  CASTLE_AGE = 102;
+  IMPERIAL_AGE = 103;
+}
+enum CivId {
+  UNKNOWN = 0;
+}
+enum ActionType {
+  UNKNOWN = 0;
+  QUEUE = 1;
+  RESEARCH = 2;
+}
+
