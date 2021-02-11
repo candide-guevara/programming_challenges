@@ -1,6 +1,11 @@
 # This is random code from the internet so it should only be run within a sandbox
-#from mgz import header, body
-#from mgz.summary import Summary
+import os
+#https://www.freedesktop.org/software/systemd/man/systemd.exec#Environment%20Variables%20in%20Spawned%20Processes
+if 'INVOCATION_ID' not in os.environ:
+  raise Exception('Not invoked inside a systemd sandbox')
+
+from mgz import header, body
+from mgz.summary import Summary
 from datetime import timedelta
 
 comment='''

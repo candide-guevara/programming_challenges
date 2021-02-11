@@ -36,24 +36,24 @@ message GameDetails {
 }
 
 enum BuildingType {
-  UNKNOWN = 0;
+  UNK_BUILDING = 0;
   TOWNCENTER = 109;
 }
 enum UnitType {
-  UNKNOWN = 0;
+  UNK_UNIT = 0;
   VILLAGER = 83;
 }
 enum TechId {
-  UNKNOWN = 0;
+  UNK_TECH = 0;
   FEUDAL_AGE = 101;
   CASTLE_AGE = 102;
   IMPERIAL_AGE = 103;
 }
 enum CivId {
-  UNKNOWN = 0;
+  UNK_CIV = 0;
 }
 enum ActionType {
-  UNKNOWN = 0;
+  UNK_ACTION = 0;
   QUEUE = 1;
   RESEARCH = 2;
 }
