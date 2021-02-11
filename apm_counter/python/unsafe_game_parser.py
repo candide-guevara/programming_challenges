@@ -1,71 +1,80 @@
 # This is random code from the internet so it should only be run within a sandbox
 import os
+import datetime as dt
 #https://www.freedesktop.org/software/systemd/man/systemd.exec#Environment%20Variables%20in%20Spawned%20Processes
 if 'INVOCATION_ID' not in os.environ:
   raise Exception('Not invoked inside a systemd sandbox')
 
-from mgz import header, body
-from mgz.summary import Summary
+import mgz
+import mgz.body
 from datetime import timedelta
 
-comment='''
-dir_root = '/media/llewelyn_data_b/SteamLibrary/steamapps/compatdata/813780/pfx/drive_c/users/steamuser/Games/Age of Empires 2 DE/76561198367239985/savegame'
-filepath = dir_root + '/MP Replay v101.101.43210.0 @2021.01.25 235247 (1).aoe2record'
+import io_util
+import replay_pb2
+import util
 
-cur_time = 0
-with open(filepath, 'rb') as data:
-  s = Summary(data)
-  print(s.get_map()['name']) # can also get map size
-  #eof = os.fstat(data.fileno()).st_size
-  #h = header.parse_stream(data)
-  #b = body.meta.parse_stream(data)
-  #while data.tell() < eof:
-  #  o = body.operation.parse_stream(data)
-  #  if o.type == 'sync': cur_time += o.time_increment
-    #if o.type == 'action' and o.action.type == 'create': # gets nothing
-    #if o.type == 'action' and o.action.type == 'order': # not super interesting
-    #if o.type == 'action' and o.action.type == 'add_attribute': # nothing
-    #  td = timedelta(seconds=int(cur_time/1000))
-    #  print(str(td), 'player', o.action.player_id, 'attribute', o.action.attribute, 'amount', o.action.amount)
-    #if o.type == 'action' and o.action.type == 'de_queue':
-    #  td = timedelta(seconds=int(cur_time/1000))
-    #  print(str(td), 'player', o.action.player_id, 'building', list(o.action.building_ids), 'unit', o.action.unit_type, 'amount', o.action.queue_amount, 'selected', o.action.selected)
-    #if o.type == 'action' and o.action.type == 'research' and o.action.technology_type in (101, 102, 103, 104):
-    #  td = timedelta(seconds=int(cur_time/1000))
-    #  print(str(td), 'player', o.action.player_id, 'building', o.action.building_id, 'tech', o.action.technology_type)
+def add_game_information(game_details, header):
+  # or header.scenario.game_settings.map_id
+  map_id = header.de.selected_map_id
+  game_details.map_name = mgz.const.DE_MAP_NAMES.get(map_id, '')
+  game_details.map_size = header.map_info.size_x
+  game_details.game_speed = header.de.speed
 
-#td = timedelta(seconds=int(cur_time/1000))
-#print('last time', str(td))
-#print('last time (1.3)', str(td/1.3))
-#print('last time (1.5)', str(td/1.5))
-#print('last time (1.7)', str(td/1.7))
-#print('last time (2.0)', str(td/2.0))
-#print(h.de)
-#print(h.replay)
+def add_player_information(game_details, header):
+  idx_map = [ None for _ in range(len(header.de.players)) ]
+  for idx,player in enumerate(header.de.players):
+    if player.type != 'human': continue
+    idx_map[idx] = len(game_details.players)
+    pb_player = game_details.players.add()
+    pb_player.name = player.name.value.decode()
+    pb_player.civ_id = player.civ_id
+  return idx_map
 
-#Container: 
-#    type = sync (total 4)
-#    start = 885599
-#    op = 2
-#    time_increment = 40
-#    next = 3
-#    checksum = None
-#    end = 885607
-#Container: 
-#    type = action (total 6)
-#    start = 887223
-#    op = 1
-#    length = 28
-#    action = Container: 
-#        type_int = 101
-#        type = research (total 8)
-#        building_id = 4920
-#        player_id = 4
-#        next = Container: 
-#            check = -1
-#        selected = 1
-#        technology_type = 101
-#        selected_ids = ListContainer: 
-#            -1
-#    end = 887263
-'''
+def add_action_information(game_details, idx_map, replay_file):
+  size = os.path.getsize(replay_file.name)
+  cur_millis = 0
+  while replay_file.tell() < size:
+    op = mgz.body.operation.parse_stream(replay_file)
+    if op.type == 'sync':
+      cur_millis += op.time_increment
+      continue
+    if op.type == 'action':
+      idx = op.action.search('player_id')
+      if idx == None or idx_map[idx] == None: continue
+      action = game_details.players[idx_map[idx]].actions.add()
+      action.offset_millis = cur_millis
+      action.type = op.action.type_int
+      action.tech_id = op.action.search('technology_type') or 0
+      action.unit_type = op.action.search('unit_type') or 0
+      action.building_type = op.action.search('building_type') or 0
+      action.amount = op.action.search('queue_amount') or op.action.search('amount') or 0
+
+def write_game_details_internal(conf, filepath):
+  game_details = replay_pb2.GameDetails()
+  with open(filepath, 'rb') as replay_file:
+    header = mgz.header.parse_stream(replay_file)
+    if header.version != mgz.util.Version.DE:
+      raise Exception('Not AOE2_DE replay version: %r', filepath)
+    mgz.body.meta.parse_stream(replay_file) # discarted
+    add_game_information(game_details, header)
+    idx_map = add_player_information(game_details, header)
+    add_action_information(game_details, idx_map, replay_file)
+  return game_details
+
+def write_game_details(parser_input):
+  game_details = write_game_details_internal(parser_input.conf, parser_input.filepath)
+  str_date = dt.datetime.fromtimestamp(parser_input.start_secs).strftime("%Y-%m-%d-%H%M")
+  filepath = os.path.join(parser_input.conf.ts_root, "game_details_%s_%s.pb.gz"
+                          % (game_details.map_name.replace(' ', ''), str_date))
+  io_util.serialize_to_gz_file(filepath, game_details)
+  duration = int(game_details.duration_millis / (game_details.game_speed*1000))
+  return util.ParserResult(filepath, duration)
+
+def main():
+  conf = util.init_conf()
+  util.init_logging(conf)
+  game_details = write_game_details_internal(conf, conf.replay_file)
+  
+if __name__ == '__main__':
+  main()
+

@@ -44,13 +44,17 @@ def extract_timeserie_time_bounds(entry):
     ref_secs = None
     last_offset = 0
     for ts in io_util.timeserie_gz_read_iterator(entry.filepath):
-      if not ref_time: ref_secs = ts.ref_secs
+      if ts.metadata.ref_secs: ref_secs = ts.metadata.ref_secs
       last_offset = ts.offset_millis[-1]
     entry.end_secs = int(last_offset/1000) + ref_secs
   return (entry.start_secs, entry.end_secs, entry.filepath)
 
 def add_timeserie_files_to_repo(conf, replay_repo):
   timeserie_repo = io_util.parse_from_gz_file(conf.timeserie_repo, timeserie_pb2.TimeserieRepo())
+  if len(timeserie_repo.entries) == 0:
+    logging.warning("File %r does not exist, skipping timeseries", conf.timeserie_repo)
+    return
+
   bound_path_tuples = sorted( extract_timeserie_time_bounds(e) for e in timeserie_repo.entries )
   sorted_start = [ t[0] for t in bound_path_tuples ]
   for replay in replay_repo.replays:
@@ -73,8 +77,11 @@ def parse_replay_files(conf, replay_repo):
   workers = max(1, int(os.cpu_count() / 2))
   with multiprocessing.Pool(workers) as pool:
     # see util.ParserResult
+    parser_inputs = [ util.ParserInput(conf, r.filepath, r.start_secs)
+                      for r in replay_repo.replays
+                      if not r.details or conf.rebuild ]
     parser_results = pool.map(unsafe_game_parser.write_game_details,
-                              ( (conf, r.filepath) for r in replay_repo.replays ))
+                              parser_inputs)
 
   for idx,result in enumerate(parser_results):
     if not result:
