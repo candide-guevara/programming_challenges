@@ -75,20 +75,25 @@ def parse_replay_files(conf, replay_repo):
   # explicetly requested
   import unsafe_game_parser
   workers = max(1, int(os.cpu_count() / 2))
+  parser_inputs = [ util.ParserInput(idx, conf, r.filepath, r.start_secs)
+                    for idx,r in enumerate(replay_repo.replays)
+                    if not r.details or conf.rebuild ]
   with multiprocessing.Pool(workers) as pool:
-    # see util.ParserResult
-    parser_inputs = [ util.ParserInput(conf, r.filepath, r.start_secs)
-                      for r in replay_repo.replays
-                      if not r.details or conf.rebuild ]
+    # see util.ParserInput, util.ParserResult
     parser_results = pool.map(unsafe_game_parser.write_game_details,
                               parser_inputs)
 
-  for idx,result in enumerate(parser_results):
-    if not result:
-      logging.warning("Failed to parse %r", replay_repo.replays[idx].filepath)
-    replay_repo.replays[idx].details = result.filepath
-    replay_repo.replays[idx].start_secs = max(replay_repo.replays[idx].start_secs,
-      replay_repo.replays[idx].end_secs - result.game_duration_secs)
+  fiascos = [ r.filepath for r in parser_results if not r.ok ]
+  if fiascos:
+    logging.warning("Failed to parse: %r", fiascos)
+
+  for parser_in,parser_out in zip(parser_inputs, parser_results):
+    if not parser_out.ok: continue
+    idx = parser_in.replay_idx
+    replay = replay_repo.replays[idx]
+    replay.details = parser_out.filepath
+    replay.start_secs = max(replay.start_secs,
+                            replay.end_secs - parser_out.game_duration_secs)
 
 def main():
   conf = util.init_conf()

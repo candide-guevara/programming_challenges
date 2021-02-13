@@ -1,6 +1,24 @@
 # This is meant to be sourced
 
+shell_in_sandbox() {
+  __preamble__=(
+    systemd-run
+    --unit "sandboxed_shell"
+    --shell
+  )
+  __run_in_sandbox__
+}
+
 run_in_sandbox() {
+  __preamble__=(
+    systemd-run
+    --unit "sandboxed_$1"
+    --quiet --wait --collect --pty
+  )
+  __run_in_sandbox__ "$@"
+}
+
+__run_in_sandbox__() {
   local cur_wd="`readlink -f .`"
   local user="${SUDO_USER:-$USER}"
   if [[ "`id -u "$user"`" == "0" ]]; then
@@ -9,9 +27,7 @@ run_in_sandbox() {
   fi
   echo "[SANDBOXED] $@"
   # Will request root privileges to set the sandbox unless the function is run via sudo
-  systemd-run \
-    --unit "sandboxed_$1" \
-    --quiet --wait --collect --pty \
+  "${__preamble__[@]}" \
     -p User="$user" \
     -p Group="`id -g "$user"`" \
     -p NoNewPrivileges=true \

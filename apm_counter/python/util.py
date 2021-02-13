@@ -4,8 +4,8 @@ import argparse
 import logging
 import collections
 
-ParserInput = collections.namedtuple('ParserInput', ['conf', 'filepath', 'start_secs'])
-ParserResult = collections.namedtuple('ParserResult', ['filepath', 'game_duration_secs'])
+ParserInput = collections.namedtuple('ParserInput', ['replay_idx', 'conf', 'filepath', 'start_secs'])
+ParserResult = collections.namedtuple('ParserResult', ['ok', 'filepath', 'game_duration_secs'])
 
 def init_conf(argv=None):
   parser = argparse.ArgumentParser("apm counter")

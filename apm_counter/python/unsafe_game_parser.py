@@ -1,10 +1,12 @@
 # This is random code from the internet so it should only be run within a sandbox
+import logging
 import os
 import datetime as dt
-#https://www.freedesktop.org/software/systemd/man/systemd.exec#Environment%20Variables%20in%20Spawned%20Processes
+# https://www.freedesktop.org/software/systemd/man/systemd.exec#Environment%20Variables%20in%20Spawned%20Processes
 if 'INVOCATION_ID' not in os.environ:
   raise Exception('Not invoked inside a systemd sandbox')
 
+# https://github.com/happyleavesaoc/aoc-mgz
 import mgz
 import mgz.body
 from datetime import timedelta
@@ -40,16 +42,17 @@ def add_action_information(game_details, idx_map, replay_file):
       continue
     if op.type == 'action':
       idx = op.action.search('player_id')
-      if idx == None or idx_map[idx] == None: continue
+      if idx == None or idx >= len(idx_map) or idx_map[idx] == None: continue
       action = game_details.players[idx_map[idx]].actions.add()
       action.offset_millis = cur_millis
       action.type = op.action.type_int
       action.tech_id = op.action.search('technology_type') or 0
       action.unit_type = op.action.search('unit_type') or 0
       action.building_type = op.action.search('building_type') or 0
-      action.amount = op.action.search('queue_amount') or op.action.search('amount') or 0
+      action.amount = int(op.action.search('queue_amount') or op.action.search('amount') or 0)
 
 def write_game_details_internal(conf, filepath):
+  logging.info("Parsing file: %r", filepath)
   game_details = replay_pb2.GameDetails()
   with open(filepath, 'rb') as replay_file:
     header = mgz.header.parse_stream(replay_file)
@@ -58,17 +61,24 @@ def write_game_details_internal(conf, filepath):
     mgz.body.meta.parse_stream(replay_file) # discarted
     add_game_information(game_details, header)
     idx_map = add_player_information(game_details, header)
-    add_action_information(game_details, idx_map, replay_file)
+    if not idx_map:
+      logging.warning("No players found ? %r", filepath)
+    else:
+      add_action_information(game_details, idx_map, replay_file)
   return game_details
 
 def write_game_details(parser_input):
-  game_details = write_game_details_internal(parser_input.conf, parser_input.filepath)
-  str_date = dt.datetime.fromtimestamp(parser_input.start_secs).strftime("%Y-%m-%d-%H%M")
-  filepath = os.path.join(parser_input.conf.ts_root, "game_details_%s_%s.pb.gz"
-                          % (game_details.map_name.replace(' ', ''), str_date))
-  io_util.serialize_to_gz_file(filepath, game_details)
-  duration = int(game_details.duration_millis / (game_details.game_speed*1000))
-  return util.ParserResult(filepath, duration)
+  try:
+    game_details = write_game_details_internal(parser_input.conf, parser_input.filepath)
+    str_date = dt.datetime.fromtimestamp(parser_input.start_secs).strftime("%Y-%m-%d-%H%M")
+    filepath = os.path.join(parser_input.conf.ts_root, "game_details_%s_%s.pb.gz"
+                            % (game_details.map_name.replace(' ', ''), str_date))
+    io_util.serialize_to_gz_file(filepath, game_details)
+    duration = int(game_details.duration_millis / (game_details.game_speed*1000))
+    return util.ParserResult(True, filepath, duration)
+  except:
+    logging.exception("Failed parsing %r", parser_input.filepath)
+    return util.ParserResult(False, '', 0)
 
 def main():
   conf = util.init_conf()

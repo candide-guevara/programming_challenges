@@ -1,5 +1,6 @@
 import datetime as dt
 import gzip
+import logging
 import numpy as np
 import os
 import pandas as pd
@@ -10,16 +11,19 @@ import timeserie_pb2
 DATA_COLS = ['kbd', 'mse', 'btn']
 
 def serialize_to_gz_file(filepath, proto):
+  logging.debug("%s to %r", proto.DESCRIPTOR.name, filepath)
   with gzip.open(filepath, mode='wb') as fobj:
     fobj.write(proto.SerializeToString())
 
 def parse_from_gz_file(filepath, proto):
+  logging.debug("%s from %r", proto.DESCRIPTOR.name, filepath)
   if not os.path.exists(filepath): return proto
   with gzip.open(filepath) as fobj:
     proto.ParseFromString(fobj.read())
     return proto
 
 def timeserie_gz_read_iterator(filepath):
+  logging.debug("Read timeserie from %r", filepath)
   with gzip.open(filepath) as fobj:
     yield from timeserie_read_iterator(fobj)
 
@@ -39,6 +43,7 @@ def timeserie_read_iterator(fobj):
     yield ts
   
 def timeserie_gz_write(filepath, ts_list):
+  logging.debug("Read %d timeseries to %r", len(ts_list), filepath)
   with gzip.open(filepath, mode='wb') as fobj:
     for ts in ts_list: timeserie_write(fobj, ts)
 
