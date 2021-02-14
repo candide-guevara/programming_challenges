@@ -82,6 +82,9 @@ def millis_to_dt(millis, ts_start=None):
     ts_start = np.datetime64(0, 'ms')
   return ts_start + np.timedelta64(millis, 'ms')
 
+def secs_to_dt(secs, ts_start=None):
+  return millis_to_dt(secs*1000, ts_start)
+
 def millis_to_delta(millis):
   return np.timedelta64(millis, 'ms')
 
@@ -103,10 +106,12 @@ def read_df_from_timeserie_gz_between(filepath, lower_dt, upper_dt):
   read_it = timeserie_gz_read_iterator(filepath)
   index,data = allocate_and_copy(20000, None, None)
   ts_start = None
+  metadata = None
 
   for ts in read_it:
-    if ts.metadata:
+    if not ts_start:
       ts_start = metadata_start_dt(ts)
+      metadata = ts.metadata
     if (cur_size + len(ts.offset_millis)) > len(index):
       index,data = allocate_and_copy(cur_size * 2, index, data)
 
@@ -116,7 +121,7 @@ def read_df_from_timeserie_gz_between(filepath, lower_dt, upper_dt):
     write_ts_to_np_array(cur_size, index, data, ts)
     cur_size += len(ts.offset_millis)
   lower,upper = adjust_bounds_to_time(index[0:cur_size], ts_start, lower_dt, upper_dt)
-  return df_from_nparray(index[lower:upper], data[lower:upper])
+  return df_from_nparray(index[lower:upper], data[lower:upper]), metadata
 
 def read_df_from_timeserie_gz(filepath):
   lower_dt = millis_to_dt(0)

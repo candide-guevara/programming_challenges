@@ -15,4 +15,5 @@ OPT_AOE2_USR_DIR="--aoe2_usr_dir=$CFG_AOE2_USR_DIR"
 OPT_TIMESERIES_DIR="--ts_root=$CFG_TIMESERIES_DIR"
 OPT_INPUT_DEVS="--dev_files=`printf '%s,' "${CFG_INPUT_DEVS[@]}"`"
 OPT_LOG_LVL="--log_lvl=debug"
+OPT_PLAYER="--player=le_maire_dessomes_sur_marne"
 

@@ -21,6 +21,37 @@ class TestCaseBase(unittest.TestCase):
     io_util.serialize_to_gz_file(self.conf.timeserie_repo, repo)
     return repo
 
+  def create_test_game_details(self):
+    game_details = replay_pb2.GameDetails()
+    game_details.map_name = 'arabia'
+    game_details.map_size = 200
+    game_details.game_speed = 2.0
+    game_details.duration_millis = 600*1000
+
+    random_player = game_details.players.add()
+    my_player = game_details.players.add()
+    my_player.name = self.conf.player
+    
+    feudal = my_player.actions.add()
+    castle = my_player.actions.add()
+    imperial = my_player.actions.add()
+
+    feudal.offset_millis = 60*1000
+    castle.offset_millis = 120*1000
+    imperial.offset_millis = 200*1000
+
+    feudal.type = replay_pb2.RESEARCH
+    castle.type = replay_pb2.RESEARCH
+    imperial.type = replay_pb2.RESEARCH
+
+    feudal.tech_id = replay_pb2.FEUDAL_AGE
+    castle.tech_id = replay_pb2.CASTLE_AGE
+    imperial.tech_id = replay_pb2.IMPERIAL_AGE
+
+    filepath = os.path.join(self.conf.ts_root, 'game_details.pb.gz')
+    io_util.serialize_to_gz_file(filepath, game_details)
+    return game_details,filepath
+
   def create_test_replay_repo(self, start_list, end_list, name_list):
     repo = replay_pb2.ReplayRepo()
     for idx,name in enumerate(name_list):
@@ -50,6 +81,7 @@ class TestCaseBase(unittest.TestCase):
     self.conf.steam_dir = self.test_dir.name
     self.conf.ts_root = self.test_dir.name
     self.conf.aoe2_usr_dir = 'replays'
+    self.conf.player = 'mr_monkey'
     os.mkdir(os.path.join(self.test_dir.name, self.conf.aoe2_usr_dir))
     util.add_derived_fields(self.conf)
     util.init_logging(self.conf)

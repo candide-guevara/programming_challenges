@@ -53,7 +53,7 @@ class TestTimeserieIO(unittest.TestCase):
     lower_dt = io_util.millis_to_dt(3, ts_start)
     upper_dt = io_util.millis_to_dt(3 + batch_len*2, ts_start)
     last_dt = upper_dt - io_util.millis_to_delta(1)
-    df = io_util.read_df_from_timeserie_gz_between(filepath, lower_dt, upper_dt)
+    df,_ = io_util.read_df_from_timeserie_gz_between(filepath, lower_dt, upper_dt)
     self.assertEqual(df.shape, (batch_len*2, len(io_util.DATA_COLS)))
     self.assertEqual(df.index[0], io_util.dt_delta(lower_dt, ts_start))
     self.assertEqual(df.index[-1], io_util.dt_delta(last_dt, ts_start))
@@ -61,7 +61,7 @@ class TestTimeserieIO(unittest.TestCase):
   def test_read_df_from_timeserie_gz(self):
     filepath,ts_list = self.create_test_gz_and_expected_ts_list(3)
     total_len = sum( len(ts.offset_millis) for ts in ts_list )
-    df = io_util.read_df_from_timeserie_gz(filepath)
+    df,_ = io_util.read_df_from_timeserie_gz(filepath)
 
     self.assertEqual(df.shape, (total_len, len(io_util.DATA_COLS)))
     offset = 0

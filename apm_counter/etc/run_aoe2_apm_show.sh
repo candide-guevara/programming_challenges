@@ -8,7 +8,7 @@ if [[ ! -e "$python_script" ]]; then
 fi
 run_in_sandbox bash -c "
   source py_venv/bin/activate
-  python '$python_script' --do_parse '$OPT_STEAM_DIR' '$OPT_AOE2_USR_DIR' '$OPT_TIMESERIES_DIR' '$OPT_LOG_LVL' $@
+  python '$python_script' --do_parse '$OPT_PLAYER' '$OPT_STEAM_DIR' '$OPT_AOE2_USR_DIR' '$OPT_TIMESERIES_DIR' '$OPT_LOG_LVL' $@
 "
 
 

@@ -16,6 +16,7 @@ class TestAoeApmShow(test_case_base.TestCaseBase):
   def setUpClass(cls):
     matplotlib.use('SVG')
     pd.set_option('plotting.backend', 'matplotlib')
+    aoe2_apm_show.lazy_import_matplotlib()
 
   def test_plot_last_replay_in_repo(self):
     ts,filepath = self.create_test_timeserie(33, 66*1000) 
@@ -25,6 +26,17 @@ class TestAoeApmShow(test_case_base.TestCaseBase):
     self.conf.subcommand = ['plot_last_replay']
     io_util.serialize_to_gz_file(self.conf.replay_repo, replay_repo)
     aoe2_apm_show.plot_last_replay_in_repo(self.conf)
+
+  def test_plot_replay_with_game_details(self):
+    game_details,gd_fp = self.create_test_game_details()
+    real_dur_millis = int(game_details.duration_millis / game_details.game_speed)
+    real_dur_secs = int(real_dur_millis / 1000)
+    ts,ts_fp = self.create_test_timeserie(33, int(real_dur_millis * 1.2))
+    replay_repo = self.create_test_replay_repo([0, 66], [11, 66+real_dur_millis], ['rec1', 'rec2'])
+    replay = replay_repo.replays[1]
+    replay.timeserie = ts_fp
+    replay.details = gd_fp
+    aoe2_apm_show.plot_replay(self.conf, replay)
 
   def test_plot_replay_by_idx(self):
     ts,filepath = self.create_test_timeserie(33, 66*1000) 
