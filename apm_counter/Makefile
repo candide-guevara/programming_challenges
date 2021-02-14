@@ -1,6 +1,6 @@
 .ONESHELL:
 .SECONDARY:
-.PHONY: all clean fs_init go_code py_code sh_code proto sh_unittest go_unittest py_unittest test
+.PHONY: all install clean fs_init go_code py_code sh_code proto sh_unittest go_unittest py_unittest test
 
 STAGE_PATH := /tmp/bin_apm_counter
 STAGE_PY   := $(STAGE_PATH)/python
@@ -11,6 +11,7 @@ SRC_PY     := python
 SRC_SH     := etc
 SRC_PROTO  := proto
 GO_PROTOC_INSTALL := $(STAGE_PATH)/gobin/protoc-gen-go
+PREFIX     := /home/cguevara/Temp
 
 CC       := gcc
 CPPFLAGS :=
@@ -19,6 +20,9 @@ LDFLAGS  :=
 LDLIBS   :=
 
 all: py_code go_code sh_code
+
+install: all
+	rsync --archive --exclude="*/gopath" --exclude="*/go-build" "$(STAGE_PATH)" "$(PREFIX)"
 
 sh_code py_code go_code: proto | $(STAGE_PATH)
 
@@ -72,6 +76,7 @@ $(STAGE_PY)/replay_pb2.py $(SRC_GO)/messages/replay.pb.go $(STAGE_PY)/timeserie_
 	export PATH="$(PATH):`GOENV="$(GOENV)" go env GOBIN`"
 	protoc '-I=$(SRC_PROTO)' '--go_out=$(SRC_GO)' $(SRC_PROTO)/replay.proto $(SRC_PROTO)/timeserie.proto
 	protoc '-I=$(SRC_PROTO)' '--python_out=$(STAGE_PY)' $(SRC_PROTO)/replay.proto $(SRC_PROTO)/timeserie.proto
+	cp --recursive --update "$(SRC_PROTO)" "$(STAGE_PATH)"
 
 bin: | $(STAGE_PATH)
 	[[ -L bin ]] || ln -s $(STAGE_PATH) bin
