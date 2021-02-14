@@ -6,14 +6,11 @@ import unittest
 import aoe2_replay_repo_builder
 import io_util
 import replay_pb2
+import test_case_base
 import timeserie_pb2
 import util
 
-class TestAoeReplayRepoBuilder(unittest.TestCase):
-
-  @classmethod
-  def setUpClass(cls):
-    pass
+class TestAoeReplayRepoBuilder(test_case_base.TestCaseBase):
 
   def create_dummy_record_files(self, count):
     records = []
@@ -23,51 +20,6 @@ class TestAoeReplayRepoBuilder(unittest.TestCase):
       os.close(r_file[0])
       records.append(r_file[1])
     return records
-
-  def create_test_timeserie_repo(self, start_list, end_list, name_list):
-    repo = timeserie_pb2.TimeserieRepo()
-    for idx,name in enumerate(name_list):
-      entry = repo.entries.add()
-      entry.filepath = os.path.join(self.conf.ts_root, name)
-      entry.start_secs = start_list[idx]
-      if end_list[idx]: entry.end_secs = end_list[idx]
-    io_util.serialize_to_gz_file(self.conf.timeserie_repo, repo)
-    return repo
-
-  def create_test_replay_repo(self, start_list, end_list, name_list):
-    repo = replay_pb2.ReplayRepo()
-    for idx,name in enumerate(name_list):
-      entry = repo.replays.add()
-      entry.filepath = os.path.join(self.conf.aoe2_replay_dir, name)
-      entry.start_secs = start_list[idx]
-      entry.end_secs = end_list[idx]
-    io_util.serialize_to_gz_file(self.conf.replay_repo, repo)
-    return repo
-
-  def create_test_timeserie(self, start_secs, last_offset):
-    expect_ts = timeserie_pb2.Timeserie()
-    expect_ts.metadata.ref_secs = start_secs
-    expect_ts.metadata.ref_nanos = 0
-    expect_ts.offset_millis.extend([0, last_offset])
-    expect_ts.kbd_count.extend    ([0, last_offset])
-    expect_ts.mse_count.extend    ([0, last_offset])
-    expect_ts.btn_count.extend    ([0, last_offset])
-    with tempfile.NamedTemporaryFile(dir=self.conf.ts_root, prefix='timeserie.',
-                                     suffix='.pb.gz', delete=False) as ts_file: pass
-    io_util.timeserie_gz_write(ts_file.name, [expect_ts])
-    return expect_ts, ts_file.name
-
-  def setUp(self):
-    self.test_dir = tempfile.TemporaryDirectory()
-    self.conf = util.init_conf([])
-    self.conf.steam_dir = self.test_dir.name
-    self.conf.ts_root = self.test_dir.name
-    self.conf.aoe2_usr_dir = 'replays'
-    os.mkdir(os.path.join(self.test_dir.name, self.conf.aoe2_usr_dir))
-    util.add_derived_fields(self.conf)
-
-  def tearDown(self):
-    self.test_dir.cleanup()
 
   def test_load_repo_from_file(self):
     self.conf.rebuild = True
@@ -108,8 +60,8 @@ class TestAoeReplayRepoBuilder(unittest.TestCase):
     self.assertEqual(ts_repo.entries[0].end_secs, 99)
 
   def test_add_timeserie_files_to_repo(self):
-    #s_1 = self.create_test_timeserie(10, 50, 'ts1.pb.gz')
-    #ts_2 = self.create_test_timeserie(80, 50, 'ts2.pb.gz')
+    #ts_1 = self.create_test_timeserie(10, 50*1000, 'ts1.pb.gz')
+    #ts_2 = self.create_test_timeserie(80, 50*1000, 'ts2.pb.gz')
     ts_repo = self.create_test_timeserie_repo([10, 80], [60, 130], ['ts1.pb.gz', 'ts2.pb.gz'])
     replay_repo = self.create_test_replay_repo([12, 24, 86], [20, 44, 111], ['rec1', 'rec2', 'rec3'])
     aoe2_replay_repo_builder.add_timeserie_files_to_repo(self.conf, replay_repo)

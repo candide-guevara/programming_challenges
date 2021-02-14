@@ -53,7 +53,7 @@ def add_timeserie_files_to_repo(conf, replay_repo):
   timeserie_repo = io_util.parse_from_gz_file(conf.timeserie_repo, timeserie_pb2.TimeserieRepo())
   if len(timeserie_repo.entries) == 0:
     logging.warning("File %r does not exist, skipping timeseries", conf.timeserie_repo)
-    return
+    return timeserie_repo
 
   bound_path_tuples = sorted( extract_timeserie_time_bounds(e) for e in timeserie_repo.entries )
   sorted_start = [ t[0] for t in bound_path_tuples ]
@@ -68,6 +68,7 @@ def add_timeserie_files_to_repo(conf, replay_repo):
       replay.timeserie = bound_path_tuples[idx][2]
     else:
       logging.warning("No timeserie found for replay: %r", replay)
+  return timeserie_repo
 
 def parse_replay_files(conf, replay_repo):
   if not conf.do_parse: return
@@ -83,9 +84,9 @@ def parse_replay_files(conf, replay_repo):
     parser_results = pool.map(unsafe_game_parser.write_game_details,
                               parser_inputs)
 
-  fiascos = [ r.filepath for r in parser_results if not r.ok ]
+  fiascos = [ True for r in parser_results if not r.ok ]
   if fiascos:
-    logging.warning("Failed to parse: %r", fiascos)
+    logging.warning("Failed to parse %d replays", len(fiascos))
 
   for parser_in,parser_out in zip(parser_inputs, parser_results):
     if not parser_out.ok: continue
@@ -95,14 +96,18 @@ def parse_replay_files(conf, replay_repo):
     replay.start_secs = max(replay.start_secs,
                             replay.end_secs - parser_out.game_duration_secs)
 
-def main():
-  conf = util.init_conf()
-  util.init_logging(conf)
+def build_and_write_replay_repo(conf):
   replay_repo = load_repo_from_file(conf)
   find_replay_files(conf, replay_repo)
   parse_replay_files(conf, replay_repo)
-  add_timeserie_files_to_repo(conf, replay_repo)
+  timeserie_repo = add_timeserie_files_to_repo(conf, replay_repo)
   io_util.serialize_to_gz_file(conf.replay_repo, replay_repo)
+  return replay_repo, timeserie_repo
+
+def main():
+  conf = util.init_conf()
+  util.init_logging(conf)
+  build_and_write_replay_repo(conf)
 
 if __name__ == '__main__':
   main()
