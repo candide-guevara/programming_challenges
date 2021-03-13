@@ -21,26 +21,31 @@ run_in_sandbox() {
 __run_in_sandbox__() {
   local cur_wd="`readlink -f .`"
   local user="${SUDO_USER:-$USER}"
+  if [[ ! -z "$RUNNING_INSIDE_SANDBOX" ]]; then
+    echo "[ERROR] Cannot recursively invoke sandboxes"
+    return 1
+  fi
   if [[ "`id -u "$user"`" == "0" ]]; then
     echo "[ERROR] user cannot be root SUDO_USER='$SUDO_USER', USER='$USER'"
     return 1
   fi
   echo "[SANDBOXED] $@"
   # Will request root privileges to set the sandbox unless the function is run via sudo
+  # Note ProcSubset=pid will prevent reading files like /proc/cpuinfo
   "${__preamble__[@]}" \
     -p User="$user" \
     -p Group="`id -g "$user"`" \
+    -p Environment="RUNNING_INSIDE_SANDBOX=$RANDOM" \
     -p NoNewPrivileges=true \
     -p ProtectSystem=strict \
     -p ProtectHome=tmpfs \
     -p ProtectKernelTunables=true \
     -p ProtectKernelModules=true \
     -p ProtectProc=noaccess \
-    -p ProcSubset=pid \
     -p WorkingDirectory="$cur_wd" \
     -p BindPaths="$cur_wd" \
     -p ReadWritePaths="$cur_wd" \
-    -p InaccessiblePaths="/opt /boot /sys /root" \
+    -p InaccessiblePaths="/opt/aur /boot /sys /root" \
     -p PrivateNetwork=true \
     -p PrivateTmp=true \
     -p PrivateDevices=true \

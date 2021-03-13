@@ -50,7 +50,9 @@ func (self *protoApmReceiverDbWrapper) Listen(ctx context.Context, apm_chan <-ch
   done_ch := make(chan bool)
 
   err = util.ReadProtoFromZipFile(self.conf.TimeserieRepo(), &self.repo)
-  if err != nil { return nil, err }
+  if err != nil {
+    util.Warnf("Cannot open %s repo started from scratch", self.conf.TimeserieRepo())
+  }
 
   inner_ch, err = self.inner_recv.Listen(ctx, apm_chan)
   if err != nil { return nil, err }

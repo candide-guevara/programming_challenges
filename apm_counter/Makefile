@@ -11,7 +11,7 @@ SRC_PY     := python
 SRC_SH     := etc
 SRC_PROTO  := proto
 GO_PROTOC_INSTALL := $(STAGE_PATH)/gobin/protoc-gen-go
-PREFIX     := /home/cguevara/Temp
+PREFIX     := /opt/mystuff/apm_counter
 
 CC       := gcc
 CPPFLAGS :=
@@ -22,7 +22,16 @@ LDLIBS   :=
 all: py_code go_code sh_code
 
 install: all
-	rsync --archive --exclude="*/gopath" --exclude="*/go-build" "$(STAGE_PATH)" "$(PREFIX)"
+	rsync --archive \
+	  --exclude="**/$(notdir $(PY_VENV))/" --exclude="**/gopath/" --exclude="**/go-build/" \
+		"$(STAGE_PATH)/" "$(PREFIX)"
+	pushd "$(PREFIX)"
+	for script in etc/*.sh; do
+	  ln -sf "$$script"
+	done
+	[[ -d $(notdir $(PY_VENV)) ]] || mkdir $(notdir $(PY_VENV))
+	pushd "$(notdir $(PY_VENV))"
+	$(VENV_SCRIPT)
 
 sh_code py_code go_code: proto | $(STAGE_PATH)
 
@@ -85,18 +94,22 @@ $(STAGE_PATH):
 	[[ -d $(STAGE_PATH) ]] || mkdir $(STAGE_PATH)
 	[[ -d $(STAGE_PY) ]] || mkdir $(STAGE_PY)
 
+define VENV_SCRIPT
+	python -m venv .
+	source bin/activate
+	python -m pip install --upgrade pip
+	python -m pip install --quiet numpy
+	python -m pip install --quiet pandas
+	python -m pip install --quiet matplotlib
+	python -m pip install --quiet pyqt5
+	python -m pip install --quiet protobuf
+	python -m pip install --quiet mgz
+	python -m pip list
+endef
 $(PY_VENV): | $(STAGE_PATH)
 	[[ -d $(PY_VENV) ]] || mkdir $(PY_VENV)
 	pushd "$(PY_VENV)"
-	python -m venv .
-	source bin/activate
-	pip install --upgrade pip
-	pip install --quiet pandas
-	pip install --quiet matplotlib
-	pip install --quiet pyqt5
-	pip install --quiet protobuf
-	pip install --quiet mgz
-	pip list
+	$(VENV_SCRIPT)
 
 $(GO_PROTOC_INSTALL): $(GOENV)
 	GOENV="$(GOENV)" go get google.golang.org/protobuf/cmd/protoc-gen-go

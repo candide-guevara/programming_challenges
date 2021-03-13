@@ -76,6 +76,7 @@ def parse_replay_files(conf, replay_repo):
   # explicetly requested
   import unsafe_game_parser
   workers = max(1, int(os.cpu_count() / 2))
+  logging.info("Parsing game replays with %d workers", workers)
   parser_inputs = [ util.ParserInput(idx, conf, r.filepath, r.start_secs)
                     for idx,r in enumerate(replay_repo.replays)
                     if not r.details or conf.rebuild ]

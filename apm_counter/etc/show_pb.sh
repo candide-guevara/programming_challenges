@@ -1,5 +1,8 @@
+#! /bin/bash
+source "`dirname "$0"`/config.sh"
+
 descriptor="$1"
-filepath="$2"
+filepath="`readlink -f "$2"`"
 
 case "$descriptor" in
   GameDetails) proto_fp='proto/replay.proto' ;;
@@ -9,10 +12,6 @@ case "$descriptor" in
   *) proto_fp='no_proto_file_for_$descriptor' ;;
 esac
 
-if [[ ! -e "$proto_fp" ]]; then
-  echo "[ERROR] the script must be run at the install base"
-  exit 1
-fi
-
-zcat "$filepath" | protoc --decode="messages.$descriptor" "$proto_fp"
+pushd_to_root
+zcat "$filepath" | protoc -I. --decode="messages.$descriptor" "$proto_fp"
 

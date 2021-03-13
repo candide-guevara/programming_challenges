@@ -3,7 +3,7 @@ import logging
 import os
 import datetime as dt
 # https://www.freedesktop.org/software/systemd/man/systemd.exec#Environment%20Variables%20in%20Spawned%20Processes
-if 'INVOCATION_ID' not in os.environ:
+if 'RUNNING_INSIDE_SANDBOX' not in os.environ:
   raise Exception('Not invoked inside a systemd sandbox')
 
 # https://github.com/happyleavesaoc/aoc-mgz
