@@ -7,7 +7,9 @@ ADJ_OFFSET = np.zeros((IDX_MAX, 2*DIMS), dtype=np.ushort)
 ROT_MAP = np.zeros((IDX_MAX, POSSIBLE_ROTATIONS), dtype=np.ushort)
 
 def calculate_keys_for_all_syms(cube, size):
-  return set( sort_points(shift_to_origin(c, size),size).tobytes() for c in ROT_MAP[cube[:size]].T )
+  rotated = shift_to_origin_vec(ROT_MAP[cube[:size]].T, size)
+  rotated.sort(axis=1)
+  return set( c.tobytes() for c in rotated )
 
 # We assume that the lower bound is always (0,0,0,)
 def propose_candidates(cube, size):
@@ -15,22 +17,20 @@ def propose_candidates(cube, size):
   candidates = np.tile(cube, reps=(offsets.shape[0],1))
   candidates[:,size] = ADJ_CELLS[cube[:size]].reshape(-1)
   shift_by_vec_in_place(candidates, size, offsets)
-  filter_same = {}
 
   for candidate in candidates:
-    candidate[:] = sort_points(candidate, size+1)
-    if candidate[size] == 0: continue
-    filter_same[candidate.tobytes()] = candidate
-  #for c in filter_same.values(): print("...", c)
-  return filter_same.values()
+    unique_sort_in_place(candidate, size+1)
+  filtered = np.unique(candidates,axis=0)
+  return filtered[filtered[:,size] != 0]
 
 def filter_candidates(dupes, cube_candidates, size):
   new_cubes = []
+  len_before = len(dupes)
   for c in cube_candidates:
-    keys = calculate_keys_for_all_syms(c,size)
-    if all( k not in dupes for k in keys ):
+    dupes |= calculate_keys_for_all_syms(c,size)
+    if len_before != len(dupes):
       new_cubes.append(c)
-    dupes.update(keys)
+      len_before = len(dupes)
   return new_cubes
 
 def increase_by_one(polycubes, size):
@@ -55,9 +55,9 @@ def main():
   precalculations()
   polycubes = [ create_cube([(0,0,0), (0,1,0),]) ]
   for size in range(2, MAX_SIZE):
-    with print_time("size=%d" % size): polycubes = increase_by_one(polycubes, size)
-    logging.info("size=%d, count=%d", size+1, len(polycubes))
-    #for p in polycubes: print([ idx_to_point(pi).tolist() for pi in p[:size+1] ])
+    with print_time(""):
+      polycubes = increase_by_one(polycubes, size)
+      logging.info("size=%d, count=%d", size+1, len(polycubes))
   logging.warning("DONE")
 
 if __name__ == '__main__':

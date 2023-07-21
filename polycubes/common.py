@@ -41,11 +41,23 @@ def shift_to_origin(cube, size):
   of |= ((1 << (3*COORD_LEN)) - (v & MASK_Z).min()) & MASK_Z
   return shift_by(cube, size, of)
 
+def shift_to_origin_vec(cubes, size):
+  v = cubes[:,:size]
+  x = (1 << (1*COORD_LEN)) - (v & MASK_X).min(axis=1).reshape((-1,1))
+  y = (1 << (2*COORD_LEN)) - (v & MASK_Y).min(axis=1).reshape((-1,1))
+  z = (1 << (3*COORD_LEN)) - (v & MASK_Z).min(axis=1).reshape((-1,1))
+  return (((v + x) & MASK_X) | ((v + y) & MASK_Y) | ((v + z) & MASK_Z))
+
 def sort_points(cube, size):
   t = np.unique(cube[:size])
-  t2 = np.zeros(CUBE_ARR_LEN, dtype=np.ushort)
+  t2 = np.zeros_like(cube)
   t2[:t.shape[0]] = t
   return t2
+
+def unique_sort_in_place(cube, size):
+  t = np.unique(cube[:size])
+  cube[:] = np.pad(t, (0, cube.shape[0]-t.shape[0]))
+  #cube[:t.shape[0]] = t
 
 def adj_cells_and_offsets(p):
   adj_cells = np.zeros(2*DIMS, dtype=np.ushort)
