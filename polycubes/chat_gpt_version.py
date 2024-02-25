@@ -1,6 +1,6 @@
 # This took about 1h of generate-run-fix iterations with chatgpt.
 # It generates polycube counts for size 4 in about 15s.
-# This is several order of magnitude slower thn my version.
+# This is several order of magnitude slower than my version.
 # The results are wrong since they do not deduplicate all rotations/translations.
 # However the results are not that far off (at least for size 3 and 4).
 import numpy as np
