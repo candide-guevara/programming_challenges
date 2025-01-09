@@ -5,21 +5,26 @@ from common import *
 
 # Attempt1:
 # Do you know what the counting 3D polycubes problem is?
-# 
+#
 # Can you write a python program to count the number of possible 3D polycubes for any number of individual cubes? Use numpy to make the counting as fast as possible.
 #
 # Result Attempt1: results are wrong
-# 
+#
 # Attempt2:
 # I ran the program and it is not producing the right results. For example for `count_polycubes(4)` returns 136 instead of 8. Looks like it is not deduplicating correctly. Can you correct the program?
-# 
+#
 # Result Attempt2: results are wrong
-# 
+#
 # Attempt3:
 # I replaced the `canonicalize` function with the new version you provided me but the results are the same, the number of polycubes is still not correct. Maybe try to rewrite the program from scratch to get a correct version?
-# 
+#
 # Result Attempt3: results are wrong
-# 
+#
+# Attempt4:
+# It is getting better, now for `count_polycubes(3)` I get 4 instead of the correct answer 2. This is an improvement over the past version which produced a higher number. There is still some de-duplication to do, can you try and fix the program?
+#
+# Result Attempt4: results are wrong
+#
 
 def count_polycubes(n):
     """
@@ -74,7 +79,7 @@ def canonicalize(polycube):
     Translates the polycube to the origin, then generates all 24 rotations
     and reflections, and returns the lexicographically smallest representation.
     """
-    
+
     # Convert to list for easier manipulation.
     polycube_list = list(polycube)
 
@@ -90,10 +95,10 @@ def canonicalize(polycube):
         for j in range(4):
             for k in range(4):
                 rotated = rotate(translated_polycube, i, j, k)
+                for axis in ['x', 'y', 'z']:
+                  reflected = reflect(rotated, axis)
+                  orientations.add(frozenset(reflected))
                 orientations.add(frozenset(rotated))
-                orientations.add(frozenset(reflect(rotated, 'x')))
-                orientations.add(frozenset(reflect(rotated, 'y')))
-                orientations.add(frozenset(reflect(rotated, 'z')))
 
     # Find the lexicographically smallest
     return min(orientations)
