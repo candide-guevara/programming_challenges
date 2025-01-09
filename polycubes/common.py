@@ -110,3 +110,17 @@ def print_time(scope):
   yield
   logging.info("%s: %d", scope, time.time()-start)
 
+expected_counts = {
+  1: 1,
+  2: 1,
+  3: 2,
+  4: 8,
+  5: 29,
+  6: 166,
+  7: 1023,
+  8: 6922
+}
+def is_ok(n, r):
+  if n not in expected_counts: return True 
+  assert r == expected_counts[n], f"Failed for {n}, got {r} expected {expected_counts[n]}"
+

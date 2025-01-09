@@ -58,6 +58,7 @@ def main():
     with print_time(""):
       polycubes = increase_by_one(polycubes, size)
       logging.info("size=%d, count=%d", size+1, len(polycubes))
+      is_ok(size+1, len(polycubes))
   logging.warning("DONE")
 
 if __name__ == '__main__':

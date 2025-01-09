@@ -15,6 +15,11 @@ from common import *
 # 
 # Result Attempt2: results are wrong
 # 
+# Attempt3:
+# I replaced the `canonicalize` function with the new version you provided me but the results are the same, the number of polycubes is still not correct. Maybe try to rewrite the program from scratch to get a correct version?
+# 
+# Result Attempt3: results are wrong
+# 
 
 def count_polycubes(n):
     """
@@ -27,135 +32,103 @@ def count_polycubes(n):
         The number of distinct polycubes of size n.
     """
 
-    if n == 0:
+    if n <= 0:
         return 0
-    if n == 1:
-        return 1
 
-    seen = set()
-    queue = deque()
-    initial_polycube = np.zeros((1, 3), dtype=int)
-    queue.append(initial_polycube)
-    seen.add(tuple(map(tuple, initial_polycube)))
-
+    # Start with a single cube at the origin
+    initial_polycube = frozenset([(0, 0, 0)])
+    queue = deque([initial_polycube])
+    seen = {initial_polycube}
     count = 0
+
     for _ in range(n - 1):
-        next_level = set()
+        next_queue = deque()
         while queue:
             polycube = queue.popleft()
-            for i in range(polycube.shape[0]):
+            for x, y, z in polycube:
+                # Try adding a cube in all 6 directions
                 for dx, dy, dz in [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]:
-                    new_cube = polycube[i] + np.array([dx, dy, dz])
-                    
-                    # Check if the new cube already exists in the polycube
-                    if not np.any(np.all(polycube == new_cube, axis=1)):
-                        new_polycube = np.vstack([polycube, new_cube])
-                        
-                        # Canonicalize the polycube
+                    new_cube = (x + dx, y + dy, z + dz)
+                    if new_cube not in polycube:
+                        # Create a new polycube by adding the new cube
+                        new_polycube = set(polycube)
+                        new_polycube.add(new_cube)
+
+                        # Canonicalize the new polycube
                         canonical_polycube = canonicalize(new_polycube)
 
-                        # Add to the next level if it's a new shape
-                        canonical_tuple = tuple(map(tuple, canonical_polycube))
-                        if canonical_tuple not in next_level:
-                            next_level.add(canonical_tuple)
+                        # Check if this canonical form has been seen before
+                        if canonical_polycube not in seen:
+                            seen.add(canonical_polycube)
+                            next_queue.append(frozenset(new_polycube))
 
-        # Convert tuples back to numpy arrays for the next iteration
-        queue.extend(np.array(list(polycube)) for polycube in next_level)
+        queue = next_queue
 
-        if _ == n - 2:
-          count = len(next_level)
-          
-    return count
+    # In the last iteration, the queue contains all the distinct polycubes of size n
+    return len(queue)
 
 def canonicalize(polycube):
     """
     Finds the canonical representation of a polycube.
 
-    This involves translating to the origin, and then considering all
-    possible rotations and reflections to find the lexicographically
-    smallest representation.
+    Translates the polycube to the origin, then generates all 24 rotations
+    and reflections, and returns the lexicographically smallest representation.
     """
+    
+    # Convert to list for easier manipulation.
+    polycube_list = list(polycube)
 
     # Translate to origin
-    min_coords = np.min(polycube, axis=0)
-    polycube -= min_coords
+    min_x = min(x for x, _, _ in polycube_list)
+    min_y = min(y for _, y, _ in polycube_list)
+    min_z = min(z for _, _, z in polycube_list)
+    translated_polycube = [(x - min_x, y - min_y, z - min_z) for x, y, z in polycube_list]
 
-    # Generate all rotations and reflections
+    # Generate all orientations
     orientations = set()
     for i in range(4):
         for j in range(4):
             for k in range(4):
-                rotated = np.copy(polycube)
-                for _ in range(i):
-                    rotated = rotate_x(rotated)
-                for _ in range(j):
-                    rotated = rotate_y(rotated)
-                for _ in range(k):
-                    rotated = rotate_z(rotated)
+                rotated = rotate(translated_polycube, i, j, k)
+                orientations.add(frozenset(rotated))
+                orientations.add(frozenset(reflect(rotated, 'x')))
+                orientations.add(frozenset(reflect(rotated, 'y')))
+                orientations.add(frozenset(reflect(rotated, 'z')))
 
-                # Add rotated and reflected orientations to the set (avoids duplicates)
-                orientations.add(tuple(map(tuple, rotated)))
-                orientations.add(tuple(map(tuple, reflect_x(rotated))))
-                orientations.add(tuple(map(tuple, reflect_y(rotated))))
-                orientations.add(tuple(map(tuple, reflect_z(rotated))))
+    # Find the lexicographically smallest
+    return min(orientations)
 
-    # Find lexicographically smallest and convert back to numpy array
-    canonical = np.array(min(orientations))
-    
-    return canonical
+def rotate(polycube, i, j, k):
+    """Rotates the polycube i times around x-axis, j times around y-axis, k times around z-axis."""
+    rotated = polycube
+    for _ in range(i):
+        rotated = [(x, z, -y) for x, y, z in rotated]  # Rotate around x-axis
+    for _ in range(j):
+        rotated = [(-z, y, x) for x, y, z in rotated]  # Rotate around y-axis
+    for _ in range(k):
+        rotated = [(-y, x, z) for x, y, z in rotated]  # Rotate around z-axis
+    return rotated
 
-def rotate_x(polycube):
-    """Rotates a polycube 90 degrees around the x-axis."""
-    rotation_matrix = np.array([[1, 0, 0],
-                                [0, 0, -1],
-                                [0, 1, 0]])
-    return np.dot(polycube, rotation_matrix)
-
-def rotate_y(polycube):
-    """Rotates a polycube 90 degrees around the y-axis."""
-    rotation_matrix = np.array([[0, 0, 1],
-                                [0, 1, 0],
-                                [-1, 0, 0]])
-    return np.dot(polycube, rotation_matrix)
-
-def rotate_z(polycube):
-    """Rotates a polycube 90 degrees around the z-axis."""
-    rotation_matrix = np.array([[0, -1, 0],
-                                [1, 0, 0],
-                                [0, 0, 1]])
-    return np.dot(polycube, rotation_matrix)
-
-def reflect_x(polycube):
-  """Reflects a polycube through the plane x=0"""
-  reflection_matrix = np.array([[-1, 0, 0],
-                                [0, 1, 0],
-                                [0, 0, 1]])
-  return np.dot(polycube, reflection_matrix)
-
-def reflect_y(polycube):
-  """Reflects a polycube through the plane y=0"""
-  reflection_matrix = np.array([[1, 0, 0],
-                                [0, -1, 0],
-                                [0, 0, 1]])
-  return np.dot(polycube, reflection_matrix)
-
-def reflect_z(polycube):
-  """Reflects a polycube through the plane z=0"""
-  reflection_matrix = np.array([[1, 0, 0],
-                                [0, 1, 0],
-                                [0, 0, -1]])
-  return np.dot(polycube, reflection_matrix)
+def reflect(polycube, axis):
+    """Reflects the polycube across the specified axis (x, y, or z)."""
+    if axis == 'x':
+        return [(-x, y, z) for x, y, z in polycube]
+    elif axis == 'y':
+        return [(x, -y, z) for x, y, z in polycube]
+    elif axis == 'z':
+        return [(x, y, -z) for x, y, z in polycube]
 
 
 def main():
-	for size in range(3, MAX_SIZE):
-		with print_time(""):
-			polycubes = count_polycubes(size)
-			logging.info("size=%d, count=%d", size, polycubes)
-	logging.warning("DONE")
+  for size in range(3, MAX_SIZE):
+    with print_time(""):
+      polycubes = count_polycubes(size)
+      logging.info("size=%d, count=%d", size, polycubes)
+      is_ok(size, polycubes)
+  logging.warning("DONE")
 
 if __name__ == '__main__':
-	logging.basicConfig(level=logging.INFO,
-											format='[%(levelname)s] %(name)s::%(funcName)s  %(message)s')
-	main()
+  logging.basicConfig(level=logging.INFO,
+                      format='[%(levelname)s] %(name)s::%(funcName)s  %(message)s')
+  main()
 
