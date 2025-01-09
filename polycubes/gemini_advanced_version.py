@@ -3,11 +3,19 @@ from collections import deque
 import logging
 from common import *
 
-# Prompts:
+# Attempt1:
 # Do you know what the counting 3D polycubes problem is?
 # 
 # Can you write a python program to count the number of possible 3D polycubes for any number of individual cubes? Use numpy to make the counting as fast as possible.
+#
+# Result Attempt1: results are wrong
 # 
+# Attempt2:
+# I ran the program and it is not producing the right results. For example for `count_polycubes(4)` returns 136 instead of 8. Looks like it is not deduplicating correctly. Can you correct the program?
+# 
+# Result Attempt2: results are wrong
+# 
+
 def count_polycubes(n):
     """
     Counts the number of distinct 3D polycubes of size n.
@@ -73,7 +81,7 @@ def canonicalize(polycube):
     polycube -= min_coords
 
     # Generate all rotations and reflections
-    orientations = []
+    orientations = set()
     for i in range(4):
         for j in range(4):
             for k in range(4):
@@ -85,14 +93,15 @@ def canonicalize(polycube):
                 for _ in range(k):
                     rotated = rotate_z(rotated)
 
-                orientations.append(rotated)
-                orientations.append(reflect_x(rotated))
-                orientations.append(reflect_y(rotated))
-                orientations.append(reflect_z(rotated))
+                # Add rotated and reflected orientations to the set (avoids duplicates)
+                orientations.add(tuple(map(tuple, rotated)))
+                orientations.add(tuple(map(tuple, reflect_x(rotated))))
+                orientations.add(tuple(map(tuple, reflect_y(rotated))))
+                orientations.add(tuple(map(tuple, reflect_z(rotated))))
 
-    # Find lexicographically smallest
-    canonical = min(orientations, key=lambda p: tuple(map(tuple, p)))
-
+    # Find lexicographically smallest and convert back to numpy array
+    canonical = np.array(min(orientations))
+    
     return canonical
 
 def rotate_x(polycube):
