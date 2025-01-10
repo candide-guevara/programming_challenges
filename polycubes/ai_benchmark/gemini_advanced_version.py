@@ -1,7 +1,7 @@
 import numpy as np
 from collections import deque
 import logging
-from common import *
+from utils.common import *
 
 # Attempt1:
 # Do you know what the counting 3D polycubes problem is?

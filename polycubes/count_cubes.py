@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-from common import *
+from utils.common import *
 
 ADJ_CELLS = np.zeros((IDX_MAX, 2*DIMS), dtype=np.ushort)
 ADJ_OFFSET = np.zeros((IDX_MAX, 2*DIMS), dtype=np.ushort)

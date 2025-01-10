@@ -2,7 +2,7 @@ import contextlib
 import logging
 import numpy as np
 import time
-from constants import *
+from utils.constants import *
 
 shift_vec = np.array([0, COORD_LEN, 2*COORD_LEN])
 mask_vec = np.array([MASK_X, MASK_Y, MASK_Z])
@@ -108,7 +108,7 @@ def rotate_idx(m, idx):
 def print_time(scope):
   start = time.time()
   yield
-  logging.info("%s: %d", scope, time.time()-start)
+  logging.info("%s: %d secs", scope, time.time()-start)
 
 expected_counts = {
   1: 1,
