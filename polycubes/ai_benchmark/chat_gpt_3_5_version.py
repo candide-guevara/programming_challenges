@@ -3,8 +3,10 @@
 # This is several order of magnitude slower than my version.
 # The results are wrong since they do not deduplicate all rotations/translations.
 # However the results are not that far off (at least for size 3 and 4).
+import logging
 import numpy as np
 import time
+from utils.common import *
 
 MAX_SIZE = 12
 COORD_LEN = 4
@@ -41,12 +43,11 @@ def find_new_cubes(cube, size):
                     new_cubes.update(sub_cubes)
     return new_cubes
 
-def count_polycubes(max_size):
+def main():
     # Count unique polycubes up to the specified max_size
     polycube_counts = [1]  # Only the single 1x1x1 cube is counted at size 1
-    for size in range(2, max_size + 1):
+    for size in range(2, MAX_SIZE):
         unique_cubes = {}
-        print(int(time.time()), polycube_counts)
         for z in range(2**COORD_LEN):
             for y in range(2**COORD_LEN):
                 for x in range(2**COORD_LEN):
@@ -60,10 +61,14 @@ def count_polycubes(max_size):
                         add_unique_cube(unique_cubes, origin_cube)
 
         polycube_counts.append(len(unique_cubes))
+        logging.info("size=%d, count=%d", size, polycube_counts[-1])
+        is_ok(size, polycube_counts[-1])
+    logging.warning("DONE")
     return polycube_counts
 
+
 if __name__ == '__main__':
-    result = count_polycubes(MAX_SIZE)
-    for size, count in enumerate(result, start=1):
-        print(f"Size {size}: {count} unique polycubes.")
+  logging.basicConfig(level=logging.INFO,
+                      format='[%(levelname)s] %(name)s::%(funcName)s  %(message)s')
+  main()
 

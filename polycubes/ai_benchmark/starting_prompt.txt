@@ -1,0 +1,4 @@
+ Do you know what the counting 3D polycubes problem is?
+
+ Can you write a python program to count the number of possible 3D polycubes for any number of individual cubes? Use numpy to make the counting as fast as possible.
+
