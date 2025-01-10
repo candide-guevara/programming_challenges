@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-from common import *
+from utils.common import *
 
 def rotate_np(positions, axis):
     """Rotate positions 90 degrees around the given axis using NumPy for efficiency."""
@@ -12,27 +12,27 @@ def rotate_np(positions, axis):
         return np.dot(positions, np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]]))
 
 def rotate(positions, axis):
-		"""Rotate positions 90 degrees around the given axis (0, 1, or 2 corresponding to x, y, z)."""
-		if axis == 0:  # Rotate around x-axis
-				return [(x, -z, y) for (x, y, z) in positions]
-		elif axis == 1:  # Rotate around y-axis
-				return [(z, y, -x) for (x, y, z) in positions]
-		else:  # Rotate around z-axis
-				return [(-y, x, z) for (x, y, z) in positions]
+    """Rotate positions 90 degrees around the given axis (0, 1, or 2 corresponding to x, y, z)."""
+    if axis == 0:  # Rotate around x-axis
+        return [(x, -z, y) for (x, y, z) in positions]
+    elif axis == 1:  # Rotate around y-axis
+        return [(z, y, -x) for (x, y, z) in positions]
+    else:  # Rotate around z-axis
+        return [(-y, x, z) for (x, y, z) in positions]
 
 def all_rotations(positions):
-		"""Generate all distinct rotations of the given positions."""
-		rotations = set()
-		queue = [positions]
-		while queue:
-				current = queue.pop()
-				for axis in range(3):
-						rotated = rotate(current, axis)
-						rotated_canonical = canonical_form(rotated)
-						if rotated_canonical not in rotations:
-								rotations.add(rotated_canonical)
-								queue.append(rotated)
-		return rotations
+    """Generate all distinct rotations of the given positions."""
+    rotations = set()
+    queue = [positions]
+    while queue:
+        current = queue.pop()
+        for axis in range(3):
+            rotated = rotate(current, axis)
+            rotated_canonical = canonical_form(rotated)
+            if rotated_canonical not in rotations:
+                rotations.add(rotated_canonical)
+                queue.append(rotated)
+    return rotations
 
 def all_rotations_np(positions):
     """Generate all distinct rotations of the given positions using NumPy."""
@@ -58,19 +58,19 @@ def canonical_form_with_rotations_np(positions):
     return min(canonical_forms)
 
 def canonical_form_with_rotations(positions):
-		"""Find the canonical form considering all rotations."""
-		rotations = all_rotations(positions)
-		# Pick the minimal representation as the canonical form
-		return min(rotations)
+    """Find the canonical form considering all rotations."""
+    rotations = all_rotations(positions)
+    # Pick the minimal representation as the canonical form
+    return min(rotations)
 
 def canonical_form(positions):
-		"""Transform the set of positions into a canonical form to eliminate duplicates."""
-		positions = [np.array(pos) for pos in positions]
-		min_pos = np.min(positions, axis=0)
-		positions = [tuple(pos - min_pos) for pos in positions]  # Normalize to origin
-		# Sort to ensure unique representation
-		positions.sort()
-		return tuple(positions)
+    """Transform the set of positions into a canonical form to eliminate duplicates."""
+    positions = [np.array(pos) for pos in positions]
+    min_pos = np.min(positions, axis=0)
+    positions = [tuple(pos - min_pos) for pos in positions]  # Normalize to origin
+    # Sort to ensure unique representation
+    positions.sort()
+    return tuple(positions)
 
 def canonical_form_opt(positions):
     """Generate a canonical form for a set of positions by normalizing their location."""
@@ -96,15 +96,15 @@ def generate_all_rotations(positions):
     return rotations
 
 def add_cube(positions):
-		"""Add a new cube adjacent to the existing structure."""
-		new_positions = []
-		for pos in positions:
-				x, y, z = pos
-				for dx, dy, dz in [(1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)]:
-						new_pos = (x+dx, y+dy, z+dz)
-						if new_pos not in positions:
-								new_positions.append(positions + [new_pos])
-		return new_positions
+    """Add a new cube adjacent to the existing structure."""
+    new_positions = []
+    for pos in positions:
+        x, y, z = pos
+        for dx, dy, dz in [(1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)]:
+            new_pos = (x+dx, y+dy, z+dz)
+            if new_pos not in positions:
+                new_positions.append(positions + [new_pos])
+    return new_positions
 
 def normalize_positions(positions):
     """Normalize positions to ensure the polycube starts at (0, 0, 0) and is in a canonical form."""
@@ -197,31 +197,31 @@ def count_polycubes(n):
     return len(all_positions)
 
 def count_polycubes_optimized(n):
-		"""Count all unique polycubes of size n."""
-		if n == 1:
-				return 1  # Only one polycube for a single cube
-		
-		shapes = {((0,0,0),)}  # Starting shape
-		for _ in range(1, n):
-				new_shapes = set()
-				for shape in shapes:
-						for new_shape in add_cube_opt(list(shape)):
-								rotations = get_all_rotations(list(new_shape))
-								canonical_rotations = [canonical(list(rotation)) for rotation in rotations]
-								new_shapes.update(canonical_rotations)
-				shapes = new_shapes
-		return len(shapes)
+    """Count all unique polycubes of size n."""
+    if n == 1:
+        return 1  # Only one polycube for a single cube
+    shapes = {((0,0,0),)}  # Starting shape
+    for _ in range(1, n):
+        new_shapes = set()
+        for shape in shapes:
+            for new_shape in add_cube_opt(list(shape)):
+                rotations = get_all_rotations(list(new_shape))
+                canonical_rotations = [canonical(list(rotation)) for rotation in rotations]
+                new_shapes.update(canonical_rotations)
+        shapes = new_shapes
+    return len(shapes)
 
 
 def main():
-	for size in range(3, MAX_SIZE):
-		with print_time(""):
-			polycubes = count_polycubes(size)
-			logging.info("size=%d, count=%d", size, polycubes)
-	logging.warning("DONE")
+  for size in range(3, MAX_SIZE):
+    with print_time(""):
+      polycubes = count_polycubes(size)
+      logging.info("size=%d, count=%d", size, polycubes)
+      is_ok(size, polycubes)
+  logging.warning("DONE")
 
 if __name__ == '__main__':
-	logging.basicConfig(level=logging.INFO,
-											format='[%(levelname)s] %(name)s::%(funcName)s  %(message)s')
-	main()
+  logging.basicConfig(level=logging.INFO,
+                      format='[%(levelname)s] %(name)s::%(funcName)s  %(message)s')
+  main()
 
