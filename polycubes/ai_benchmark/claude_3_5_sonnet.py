@@ -27,6 +27,20 @@ from utils.common import *
 #
 # Result Attempt3: does not run
 #
+# Attempt4:
+# This new program version does not run. I get the following exception:
+# ```
+# if not coords:
+#        ^^^^^^
+# ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+# ```
+# Can you fix the program so that it runs and produce the correct results?
+#
+# Result Attempt4: results are wrong
+#
+
+import numpy as np
+from collections import deque
 
 class PolycubeCounter:
     def __init__(self):
@@ -81,19 +95,20 @@ class PolycubeCounter:
             transformations.append(matrix @ np.array([[-1,0,0], [0,1,0], [0,0,1]]))
         return transformations
 
-    def normalize_coordinates(self, coords):
+    def normalize_coordinates(self, coords_list):
         """Normalize coordinates to start from (0,0,0)"""
-        if not coords:
+        if len(coords_list) == 0:
             return tuple()
-        coords = np.array(coords)
+        # Convert input to numpy array if it isn't already
+        coords = np.array(coords_list)
         min_coords = np.min(coords, axis=0)
         normalized = coords - min_coords
-        # Sort coordinates lexicographically for consistent representation
-        return tuple(sorted(map(tuple, normalized)))
+        # Convert to tuples and sort
+        return tuple(sorted(map(tuple, normalized.tolist())))
 
-    def get_canonical_form(self, coords):
+    def get_canonical_form(self, coords_list):
         """Get canonical form considering all rotations and reflections"""
-        coords = np.array(coords)
+        coords = np.array(coords_list)
         canonical_forms = []
         for transform in self.transformations:
             # Apply transformation
@@ -115,13 +130,13 @@ class PolycubeCounter:
             return 0
         if n == 1:
             return 1
-
         seen = set()
         queue = deque()
         # Start with a single cube at origin
         initial = ((0, 0, 0),)
         queue.append(initial)
         seen.add(initial)
+
         # Generate polycubes incrementally from size 2 to n
         for size in range(2, n + 1):
             new_queue = deque()
@@ -142,7 +157,6 @@ class PolycubeCounter:
                             if canonical not in new_seen:
                                 new_seen.add(canonical)
                                 new_queue.append(new_cubes)
-
             queue = new_queue
             seen = new_seen
             if size == n:
