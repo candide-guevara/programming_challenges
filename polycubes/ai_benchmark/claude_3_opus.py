@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.spatial.distance import cdist
+from itertools import permutations, product
 import logging
 from utils.common import *
 
@@ -19,6 +20,11 @@ from utils.common import *
 # There is still something wrong. The program you produced does not return correct results. For all cube values except 1 it returns a count of 0. Can you correct the program?
 #
 # Result Attempt3: results are wrong
+#
+# Attempt4:
+# It is getting better but the program still does not return correct results. For example for 4 cubes it returns a count of 86, the correct value is 8. Looks like it is not de-duplicating the polycubes based on all possible rotation and mirror symmetries. Can you correct the program?
+#
+# Result Attempt4: does not run
 
 def is_connected(cubes):
     """Check if all cubes are connected."""
@@ -35,9 +41,15 @@ def is_connected(cubes):
     return len(visited) == len(cubes)
 
 def normalize_polycube(cubes):
-    """Translate polycube to origin and sort cubes."""
+    """Translate polycube to origin, apply all rotations and mirrors, and return the minimum representation."""
     cubes = cubes - np.min(cubes, axis=0)
-    return tuple(map(tuple, sorted(cubes, key=lambda x: (x[0], x[1], x[2]))))
+    min_repr = cubes
+    for axes in permutations(range(3)):
+        for signs in product([-1, 1], repeat=3):
+            rotated_cubes = cubes[:, axes] * signs
+            normalized_cubes = tuple(map(tuple, sorted(rotated_cubes, key=lambda x: (x[0], x[1], x[2]))))
+            min_repr = min(min_repr, normalized_cubes)
+    return min_repr
 
 def unique_polycubes(n):
     """Generate all unique polycubes of size n."""
@@ -52,7 +64,7 @@ def unique_polycubes(n):
                 if new_cube not in polycube:
                     new_polycube = polycube + (new_cube,)
                     if is_connected(np.array(new_polycube)):
-                        polycubes.add(normalize_polycube(new_polycube))
+                        polycubes.add(normalize_polycube(np.array(new_polycube)))
     
     return polycubes
 
