@@ -14,25 +14,30 @@ from utils.common import *
 # The program you produced does not return correct results. For example for 4 cubes it returns a count of 0, the correct value is 8. Can you correct the program?
 #
 # Result Attempt2: results are wrong
+#
+# Attempt3:
+# There is still something wrong. The program you produced does not return correct results. For all cube values except 1 it returns a count of 0. Can you correct the program?
+#
+# Result Attempt3: results are wrong
 
 def is_connected(cubes):
     """Check if all cubes are connected."""
-    dist = cdist(cubes, cubes, metric='chebyshev') <= 1
+    dist = cdist(cubes, cubes, metric='chebyshev') == 1
     visited = set()
     
-    def dfs(cube):
-        visited.add(tuple(cube))
-        for neighbor in cubes[np.any(dist[tuple(cube)], axis=0)]:
-            if tuple(neighbor) not in visited:
+    def dfs(idx):
+        visited.add(idx)
+        for neighbor in np.where(dist[idx])[0]:
+            if neighbor not in visited:
                 dfs(neighbor)
     
-    dfs(cubes[0])
+    dfs(0)
     return len(visited) == len(cubes)
 
 def normalize_polycube(cubes):
     """Translate polycube to origin and sort cubes."""
     cubes = cubes - np.min(cubes, axis=0)
-    return tuple(map(tuple, sorted(cubes)))
+    return tuple(map(tuple, sorted(cubes, key=lambda x: (x[0], x[1], x[2]))))
 
 def unique_polycubes(n):
     """Generate all unique polycubes of size n."""
@@ -41,13 +46,12 @@ def unique_polycubes(n):
 
     polycubes = set()
     for polycube in unique_polycubes(n-1):
-        polycube = np.array(polycube) 
         for cube in polycube:
-            for direction in np.array([[0,0,1], [0,1,0], [1,0,0], [0,0,-1], [0,-1,0], [-1,0,0]]):
-                new_cube = tuple(cube + direction)
+            for direction in [(0,0,1), (0,1,0), (1,0,0), (0,0,-1), (0,-1,0), (-1,0,0)]:
+                new_cube = tuple(np.array(cube) + direction)
                 if new_cube not in polycube:
-                    new_polycube = np.concatenate((polycube, [new_cube]))
-                    if is_connected(new_polycube):
+                    new_polycube = polycube + (new_cube,)
+                    if is_connected(np.array(new_polycube)):
                         polycubes.add(normalize_polycube(new_polycube))
     
     return polycubes
