@@ -38,9 +38,15 @@ from utils.common import *
 #
 # Result Attempt4: results are wrong
 #
-
-import numpy as np
-from collections import deque
+# Attempt5:
+# Almost perfect now.
+# The problem now is that de-duplication is too aggressive and removes polycubes which are unique.
+# For example for 4 cubes the count returned is 7, the correct value is 8.
+# For 5 cubes the count returned is 24, the correct value is 29.
+# Can you fix the program?
+#
+# Result Attempt5: results are wrong
+#
 
 class PolycubeCounter:
     def __init__(self):
@@ -56,50 +62,32 @@ class PolycubeCounter:
     def _generate_transformations(self):
         """Generate all possible 3D rotation and reflection matrices"""
         transformations = []
-        # Generate all permutations of axes
-        perms = [
-            ((1,0,0), (0,1,0), (0,0,1)),
-            ((1,0,0), (0,0,1), (0,-1,0)),
-            ((1,0,0), (0,-1,0), (0,0,-1)),
-            ((1,0,0), (0,0,-1), (0,1,0)),
-            ((0,-1,0), (1,0,0), (0,0,1)),
-            ((-1,0,0), (0,-1,0), (0,0,1)),
-            ((0,1,0), (-1,0,0), (0,0,1)),
-            ((0,0,-1), (0,1,0), (1,0,0)),
-            ((-1,0,0), (0,1,0), (0,0,-1)),
-            ((0,0,1), (0,1,0), (-1,0,0)),
-            ((0,1,0), (0,0,1), (1,0,0)),
-            ((0,0,1), (1,0,0), (0,1,0)),
-            ((1,0,0), (0,0,-1), (0,-1,0)),
-            ((0,-1,0), (0,0,1), (-1,0,0)),
-            ((0,0,-1), (1,0,0), (0,-1,0)),
-            ((-1,0,0), (0,0,-1), (0,-1,0)),
-            ((0,1,0), (0,0,-1), (-1,0,0)),
-            ((0,0,1), (-1,0,0), (0,-1,0)),
-            ((0,-1,0), (-1,0,0), (0,0,-1)),
-            ((0,0,-1), (0,-1,0), (-1,0,0)),
-            ((0,1,0), (1,0,0), (0,0,-1)),
-            ((-1,0,0), (0,0,1), (0,1,0)),
-            ((0,0,-1), (-1,0,0), (0,1,0)),
-            ((0,-1,0), (0,0,-1), (1,0,0))
-        ]
-        # Convert to matrices and add reflections
-        for perm in perms:
-            matrix = np.array(perm)
-            transformations.append(matrix)
-            # Add reflection across xy-plane
-            transformations.append(matrix @ np.array([[1,0,0], [0,1,0], [0,0,-1]]))
-            # Add reflection across xz-plane
-            transformations.append(matrix @ np.array([[1,0,0], [0,-1,0], [0,0,1]]))
-            # Add reflection across yz-plane
-            transformations.append(matrix @ np.array([[-1,0,0], [0,1,0], [0,0,1]]))
+        # All possible permutations of basis vectors (x, y, z)
+        for x in [-1, 1]:
+            for y in [-1, 1]:
+                for z in [-1, 1]:
+                    # For each reflection state, generate all axis permutations
+                    signs = np.array([[x, 0, 0], [0, y, 0], [0, 0, z]])
+                    # All possible axis permutations
+                    perms = [
+                        [[1, 0, 0], [0, 1, 0], [0, 0, 1]],  # xyz
+                        [[1, 0, 0], [0, 0, 1], [0, 1, 0]],  # xzy
+                        [[0, 1, 0], [1, 0, 0], [0, 0, 1]],  # yxz
+                        [[0, 1, 0], [0, 0, 1], [1, 0, 0]],  # yzx
+                        [[0, 0, 1], [1, 0, 0], [0, 1, 0]],  # zxy
+                        [[0, 0, 1], [0, 1, 0], [1, 0, 0]]   # zyx
+                    ]
+                    for perm in perms:
+                        transform = np.array(perm) @ signs
+                        # Only add if it produces a valid rotation/reflection matrix
+                        if np.abs(np.linalg.det(transform)) == 1:
+                            transformations.append(transform)
         return transformations
 
     def normalize_coordinates(self, coords_list):
         """Normalize coordinates to start from (0,0,0)"""
         if len(coords_list) == 0:
             return tuple()
-        # Convert input to numpy array if it isn't already
         coords = np.array(coords_list)
         min_coords = np.min(coords, axis=0)
         normalized = coords - min_coords
@@ -111,8 +99,8 @@ class PolycubeCounter:
         coords = np.array(coords_list)
         canonical_forms = []
         for transform in self.transformations:
-            # Apply transformation
-            transformed = np.dot(coords, transform)
+            # Apply transformation and round to handle numerical precision issues
+            transformed = np.round(np.dot(coords, transform)).astype(int)
             # Normalize and add to list
             normalized = self.normalize_coordinates(transformed)
             canonical_forms.append(normalized)
@@ -136,7 +124,6 @@ class PolycubeCounter:
         initial = ((0, 0, 0),)
         queue.append(initial)
         seen.add(initial)
-
         # Generate polycubes incrementally from size 2 to n
         for size in range(2, n + 1):
             new_queue = deque()
