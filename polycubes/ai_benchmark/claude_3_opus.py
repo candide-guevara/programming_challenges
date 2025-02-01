@@ -25,6 +25,17 @@ from utils.common import *
 # It is getting better but the program still does not return correct results. For example for 4 cubes it returns a count of 86, the correct value is 8. Looks like it is not de-duplicating the polycubes based on all possible rotation and mirror symmetries. Can you correct the program?
 #
 # Result Attempt4: does not run
+#
+# Attempt5:
+# The program you produced does not compile. I got the following error:
+# ```
+# min_repr = min(min_repr, normalized_cubes)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+# ```
+# Can you fix the program so that it runs and produce the correct results?
+#
+# Result Attempt5: results are wrong
 
 def is_connected(cubes):
     """Check if all cubes are connected."""
@@ -43,7 +54,7 @@ def is_connected(cubes):
 def normalize_polycube(cubes):
     """Translate polycube to origin, apply all rotations and mirrors, and return the minimum representation."""
     cubes = cubes - np.min(cubes, axis=0)
-    min_repr = cubes
+    min_repr = tuple(map(tuple, cubes))
     for axes in permutations(range(3)):
         for signs in product([-1, 1], repeat=3):
             rotated_cubes = cubes[:, axes] * signs
