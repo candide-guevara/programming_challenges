@@ -9,6 +9,11 @@ from utils.common import *
 # Can you write a python program to count the number of possible 3D polycubes for any number of individual cubes? Use numpy to make the counting as fast as possible.
 #
 # Result Attempt1: results are wrong
+#
+# Attempt2:
+# The program you produced does not return correct results. For example for 4 cubes it returns a count of 0, the correct value is 8. Can you correct the program?
+#
+# Result Attempt2: results are wrong
 
 def is_connected(cubes):
     """Check if all cubes are connected."""
@@ -38,11 +43,12 @@ def unique_polycubes(n):
     for polycube in unique_polycubes(n-1):
         polycube = np.array(polycube) 
         for cube in polycube:
-            for direction in np.eye(3, dtype=int):
+            for direction in np.array([[0,0,1], [0,1,0], [1,0,0], [0,0,-1], [0,-1,0], [-1,0,0]]):
                 new_cube = tuple(cube + direction)
                 if new_cube not in polycube:
-                    new_polycube = normalize_polycube(np.concatenate((polycube, [new_cube])))
-                    polycubes.add(new_polycube)
+                    new_polycube = np.concatenate((polycube, [new_cube]))
+                    if is_connected(new_polycube):
+                        polycubes.add(normalize_polycube(new_polycube))
     
     return polycubes
 
