@@ -13,6 +13,18 @@ from utils.common import *
 # The program you produced does not return correct results. For example for 4 cubes it returns a count of 150, the correct value is 8. can you correct the program?
 #
 # Result Attempt2: does not compile
+#
+# Attempt3:
+# The program you produced does not compile. I got the following error:
+# ```
+# File "copilot_gpt_4o.py", line 27, in generate_polycubes
+#     return {frozenset(grid.nonzero())}
+#             ^^^^^^^^^^^^^^^^^^^^^^^^^
+# TypeError: unhashable type: 'numpy.ndarray'
+# ```
+# Can you fix the program so that it runs and produce teh correct results?
+#
+# Result Attempt3: results are wrong
 
 # Define the possible moves to adjacent cubes (6 possible directions)
 moves = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
@@ -24,7 +36,9 @@ def is_valid(x, y, z, grid):
 def generate_polycubes(n, grid, x, y, z, remaining):
     """Generate all distinct polycubes of size n."""
     if remaining == 0:
-        return {frozenset(grid.nonzero())}
+        # Convert the non-zero entries to a set of tuples representing the coordinates
+        non_zero_positions = set(zip(*grid.nonzero()))
+        return {frozenset(non_zero_positions)}
     
     polycubes = set()
     for move in moves:
