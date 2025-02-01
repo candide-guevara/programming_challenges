@@ -11,6 +11,17 @@ from utils.common import *
 #
 # Result Attempt1: results are wrong
 #
+# Attempt2:
+# This is new version is an improvement but the program still does not return correct results.
+# For example for 4 cubes it returns a count of 37, the correct value is 8.
+# Looks like it is not de-duplicating the polycubes based on all rotation, reflection and translation transformations.
+# Can you fix the program?
+#
+# Result Attempt2: results are wrong
+#
+
+import numpy as np
+from collections import deque
 
 class PolycubeCounter:
     def __init__(self):
@@ -20,7 +31,40 @@ class PolycubeCounter:
             [0, 1, 0], [0, -1, 0],
             [0, 0, 1], [0, 0, -1]
         ])
+        # Generate all possible rotation and reflection matrices
+        self.transformations = self._generate_transformations()
+
+    def _generate_transformations(self):
+        """Generate all possible 3D rotation and reflection matrices"""
+        transformations = []
+        # All possible sign combinations for reflection
+        signs = [(sx, sy, sz) for sx, sy, sz in [(1,1,1), (1,1,-1), (1,-1,1), (-1,1,1),
+                                                (1,-1,-1), (-1,1,-1), (-1,-1,1), (-1,-1,-1)]]
+        # Basic rotation matrices around each axis
+        def rot_x(k): return np.array([[1,0,0], [0,int(np.cos(k*np.pi/2)),-int(np.sin(k*np.pi/2))],
+                                     [0,int(np.sin(k*np.pi/2)),int(np.cos(k*np.pi/2))]])
+        def rot_y(k): return np.array([[int(np.cos(k*np.pi/2)),0,int(np.sin(k*np.pi/2))], [0,1,0],
+                                     [-int(np.sin(k*np.pi/2)),0,int(np.cos(k*np.pi/2))]])
+        def rot_z(k): return np.array([[int(np.cos(k*np.pi/2)),-int(np.sin(k*np.pi/2)),0],
+                                     [int(np.sin(k*np.pi/2)),int(np.cos(k*np.pi/2)),0], [0,0,1]])
+
+        # Generate all rotations (24 basic rotations)
+        for i in range(4):  # Rotate around x
+            for j in range(4):  # Rotate around y
+                for k in range(4):  # Rotate around z
+                    rot = rot_z(k) @ rot_y(j) @ rot_x(i)
+                    if not any(np.allclose(rot, t) for t in transformations):
+                        transformations.append(rot)
         
+        # Add reflections
+        all_transforms = []
+        for t in transformations:
+            for sx, sy, sz in signs:
+                reflection = t @ np.diag([sx, sy, sz])
+                if not any(np.allclose(reflection, existing) for existing in all_transforms):
+                    all_transforms.append(reflection)
+        return all_transforms
+
     def normalize_coordinates(self, coords):
         """Normalize coordinates to start from (0,0,0)"""
         coords = np.array(coords)
@@ -28,51 +72,18 @@ class PolycubeCounter:
         return tuple(map(tuple, coords - min_coords))
 
     def get_canonical_form(self, coords):
-        """Get canonical form considering all rotations"""
+        """Get canonical form considering all rotations and reflections"""
         coords = np.array(coords)
         
-        # All possible 90-degree rotations in 3D
-        rotations = [
-            # Identity
-            np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
-            # Rotations around x-axis
-            np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]]),
-            np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]]),
-            np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]]),
-            # Rotations around y-axis
-            np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]]),
-            np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]]),
-            np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]]),
-            # Rotations around z-axis
-            np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]]),
-            np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]),
-            np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]]),
-            # Composite rotations
-            np.array([[0, -1, 0], [0, 0, -1], [1, 0, 0]]),
-            np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]]),
-            np.array([[-1, 0, 0], [0, 0, 1], [0, 1, 0]]),
-            np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]]),
-            np.array([[0, 0, 1], [1, 0, 0], [0, 1, 0]]),
-            np.array([[1, 0, 0], [0, 0, -1], [0, -1, 0]]),
-            np.array([[0, -1, 0], [0, 0, 1], [-1, 0, 0]]),
-            np.array([[0, 0, -1], [1, 0, 0], [0, -1, 0]]),
-            np.array([[-1, 0, 0], [0, 0, -1], [0, -1, 0]]),
-            np.array([[0, 1, 0], [0, 0, -1], [-1, 0, 0]]),
-            np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]]),
-            np.array([[0, -1, 0], [-1, 0, 0], [0, 0, -1]]),
-            np.array([[0, 0, -1], [0, -1, 0], [-1, 0, 0]]),
-            np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
-        ]
+        # Apply all possible transformations and get normalized forms
+        all_forms = []
+        for transform in self.transformations:
+            transformed = np.dot(coords, transform)
+            normalized = self.normalize_coordinates(transformed)
+            all_forms.append(normalized)
         
-        # Get all possible rotations of the polycube
-        all_rotations = []
-        for rot_matrix in rotations:
-            rotated = np.dot(coords, rot_matrix)
-            normalized = self.normalize_coordinates(rotated)
-            all_rotations.append(normalized)
-        
-        # Return the lexicographically smallest rotation
-        return min(all_rotations)
+        # Return the lexicographically smallest form
+        return min(all_forms)
 
     def get_neighbors(self, coord):
         """Get all possible neighbors of a coordinate"""
@@ -87,7 +98,6 @@ class PolycubeCounter:
 
         seen = set()
         queue = deque()
-        
         # Start with a single cube at origin
         initial = ((0, 0, 0),)
         queue.append(initial)
@@ -97,10 +107,8 @@ class PolycubeCounter:
         for size in range(2, n + 1):
             new_queue = deque()
             new_seen = set()
-            
             while queue:
                 current = queue.popleft()
-                
                 # Try adding a cube to each possible neighbor position
                 for cube in current:
                     for neighbor in self.get_neighbors(cube):
@@ -119,7 +127,6 @@ class PolycubeCounter:
             
             queue = new_queue
             seen = new_seen
-            
             if size == n:
                 return len(seen)
 
