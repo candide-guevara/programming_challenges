@@ -9,6 +9,10 @@ from utils.common import *
 #
 # Result Attempt1: results are wrong
 #
+# Attempt2:
+# The program you produced does not return correct results. For example for 4 cubes it returns a count of 150, the correct value is 8. can you correct the program?
+#
+# Result Attempt2: does not compile
 
 # Define the possible moves to adjacent cubes (6 possible directions)
 moves = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
@@ -17,21 +21,19 @@ def is_valid(x, y, z, grid):
     """Check if the position is valid and unoccupied."""
     return 0 <= x < grid.shape[0] and 0 <= y < grid.shape[1] and 0 <= z < grid.shape[2] and grid[x, y, z] == 0
 
-def count_polycubes(n, grid, x, y, z, remaining, visited):
-    """Count the number of distinct polycubes of size n."""
+def generate_polycubes(n, grid, x, y, z, remaining):
+    """Generate all distinct polycubes of size n."""
     if remaining == 0:
-        return 1
+        return {frozenset(grid.nonzero())}
     
-    count = 0
+    polycubes = set()
     for move in moves:
         nx, ny, nz = x + move[0], y + move[1], z + move[2]
-        if is_valid(nx, ny, nz, grid) and (nx, ny, nz) not in visited:
+        if is_valid(nx, ny, nz, grid):
             grid[nx, ny, nz] = 1
-            visited.add((nx, ny, nz))
-            count += count_polycubes(n, grid, nx, ny, nz, remaining - 1, visited)
+            polycubes |= generate_polycubes(n, grid, nx, ny, nz, remaining - 1)
             grid[nx, ny, nz] = 0
-            visited.remove((nx, ny, nz))
-    return count
+    return polycubes
 
 def count_3d_polycubes(n):
     """Initialize the grid and start the counting."""
@@ -41,9 +43,9 @@ def count_3d_polycubes(n):
     # Start from the center of the grid
     center = grid_size // 2
     grid[center, center, center] = 1
-    visited = {(center, center, center)}
     
-    return count_polycubes(n, grid, center, center, center, n - 1, visited)
+    polycubes = generate_polycubes(n, grid, center, center, center, n - 1)
+    return len(polycubes)
 
 def main():
 	for size in range(3, MAX_SIZE):
