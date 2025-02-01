@@ -2,12 +2,19 @@ import logging
 from itertools import product
 from utils.common import *
 
-# Attempt1: NOT using deppthink mode
+# Attempt1: NOT using deepthink mode
 # Do you know what the counting 3D polycubes problem is? If so, do you know the solutions for the first 2 to 6 cube counts?
 #
 # Can you write a python program to count the number of possible 3D polycubes for any number of individual cubes? Use numpy to make the counting as fast as possible.
 #
 # Result Attempt1: results are wrong
+#
+# Attempt2: ENABLED deepthink
+# It is a very good start but the program still does not return correct results.
+# For example for 4 cubes it returns a count of 150, the correct value is 8.
+# Looks like it is not de-duplicating the polycubes based on all possible rotation and mirror symmetries. Can you correct the program?
+#
+# Result Attempt2: The server is busy. Please try again later. [3 times]
 
 # Directions for neighboring cubes in 3D space
 DIRECTIONS = [
