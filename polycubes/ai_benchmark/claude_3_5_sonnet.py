@@ -19,9 +19,14 @@ from utils.common import *
 #
 # Result Attempt2: results are wrong
 #
-
-import numpy as np
-from collections import deque
+# Attempt3:
+# It is getting better but the program still does not return correct results.
+# For example for 4 cubes it returns a count of 27, the correct value is 8.
+# Looks like it is not de-duplicating correctly.
+# Can you fix the program?
+#
+# Result Attempt3: does not run
+#
 
 class PolycubeCounter:
     def __init__(self):
@@ -31,62 +36,77 @@ class PolycubeCounter:
             [0, 1, 0], [0, -1, 0],
             [0, 0, 1], [0, 0, -1]
         ])
-        # Generate all possible rotation and reflection matrices
+        # Pre-compute all possible transformations
         self.transformations = self._generate_transformations()
 
     def _generate_transformations(self):
         """Generate all possible 3D rotation and reflection matrices"""
         transformations = []
-        # All possible sign combinations for reflection
-        signs = [(sx, sy, sz) for sx, sy, sz in [(1,1,1), (1,1,-1), (1,-1,1), (-1,1,1),
-                                                (1,-1,-1), (-1,1,-1), (-1,-1,1), (-1,-1,-1)]]
-        # Basic rotation matrices around each axis
-        def rot_x(k): return np.array([[1,0,0], [0,int(np.cos(k*np.pi/2)),-int(np.sin(k*np.pi/2))],
-                                     [0,int(np.sin(k*np.pi/2)),int(np.cos(k*np.pi/2))]])
-        def rot_y(k): return np.array([[int(np.cos(k*np.pi/2)),0,int(np.sin(k*np.pi/2))], [0,1,0],
-                                     [-int(np.sin(k*np.pi/2)),0,int(np.cos(k*np.pi/2))]])
-        def rot_z(k): return np.array([[int(np.cos(k*np.pi/2)),-int(np.sin(k*np.pi/2)),0],
-                                     [int(np.sin(k*np.pi/2)),int(np.cos(k*np.pi/2)),0], [0,0,1]])
-
-        # Generate all rotations (24 basic rotations)
-        for i in range(4):  # Rotate around x
-            for j in range(4):  # Rotate around y
-                for k in range(4):  # Rotate around z
-                    rot = rot_z(k) @ rot_y(j) @ rot_x(i)
-                    if not any(np.allclose(rot, t) for t in transformations):
-                        transformations.append(rot)
-        
-        # Add reflections
-        all_transforms = []
-        for t in transformations:
-            for sx, sy, sz in signs:
-                reflection = t @ np.diag([sx, sy, sz])
-                if not any(np.allclose(reflection, existing) for existing in all_transforms):
-                    all_transforms.append(reflection)
-        return all_transforms
+        # Generate all permutations of axes
+        perms = [
+            ((1,0,0), (0,1,0), (0,0,1)),
+            ((1,0,0), (0,0,1), (0,-1,0)),
+            ((1,0,0), (0,-1,0), (0,0,-1)),
+            ((1,0,0), (0,0,-1), (0,1,0)),
+            ((0,-1,0), (1,0,0), (0,0,1)),
+            ((-1,0,0), (0,-1,0), (0,0,1)),
+            ((0,1,0), (-1,0,0), (0,0,1)),
+            ((0,0,-1), (0,1,0), (1,0,0)),
+            ((-1,0,0), (0,1,0), (0,0,-1)),
+            ((0,0,1), (0,1,0), (-1,0,0)),
+            ((0,1,0), (0,0,1), (1,0,0)),
+            ((0,0,1), (1,0,0), (0,1,0)),
+            ((1,0,0), (0,0,-1), (0,-1,0)),
+            ((0,-1,0), (0,0,1), (-1,0,0)),
+            ((0,0,-1), (1,0,0), (0,-1,0)),
+            ((-1,0,0), (0,0,-1), (0,-1,0)),
+            ((0,1,0), (0,0,-1), (-1,0,0)),
+            ((0,0,1), (-1,0,0), (0,-1,0)),
+            ((0,-1,0), (-1,0,0), (0,0,-1)),
+            ((0,0,-1), (0,-1,0), (-1,0,0)),
+            ((0,1,0), (1,0,0), (0,0,-1)),
+            ((-1,0,0), (0,0,1), (0,1,0)),
+            ((0,0,-1), (-1,0,0), (0,1,0)),
+            ((0,-1,0), (0,0,-1), (1,0,0))
+        ]
+        # Convert to matrices and add reflections
+        for perm in perms:
+            matrix = np.array(perm)
+            transformations.append(matrix)
+            # Add reflection across xy-plane
+            transformations.append(matrix @ np.array([[1,0,0], [0,1,0], [0,0,-1]]))
+            # Add reflection across xz-plane
+            transformations.append(matrix @ np.array([[1,0,0], [0,-1,0], [0,0,1]]))
+            # Add reflection across yz-plane
+            transformations.append(matrix @ np.array([[-1,0,0], [0,1,0], [0,0,1]]))
+        return transformations
 
     def normalize_coordinates(self, coords):
         """Normalize coordinates to start from (0,0,0)"""
+        if not coords:
+            return tuple()
         coords = np.array(coords)
         min_coords = np.min(coords, axis=0)
-        return tuple(map(tuple, coords - min_coords))
+        normalized = coords - min_coords
+        # Sort coordinates lexicographically for consistent representation
+        return tuple(sorted(map(tuple, normalized)))
 
     def get_canonical_form(self, coords):
         """Get canonical form considering all rotations and reflections"""
         coords = np.array(coords)
-        
-        # Apply all possible transformations and get normalized forms
-        all_forms = []
+        canonical_forms = []
         for transform in self.transformations:
+            # Apply transformation
             transformed = np.dot(coords, transform)
+            # Normalize and add to list
             normalized = self.normalize_coordinates(transformed)
-            all_forms.append(normalized)
-        
+            canonical_forms.append(normalized)
         # Return the lexicographically smallest form
-        return min(all_forms)
+        return min(canonical_forms)
 
     def get_neighbors(self, coord):
         """Get all possible neighbors of a coordinate"""
+        coord = np.array(coord)
         return [tuple(coord + d) for d in self.directions]
 
     def count_polycubes(self, n):
@@ -102,7 +122,6 @@ class PolycubeCounter:
         initial = ((0, 0, 0),)
         queue.append(initial)
         seen.add(initial)
-        
         # Generate polycubes incrementally from size 2 to n
         for size in range(2, n + 1):
             new_queue = deque()
@@ -116,15 +135,14 @@ class PolycubeCounter:
                             # Create new polycube by adding neighbor
                             new_cubes = list(current)
                             new_cubes.append(neighbor)
-                            new_cubes = tuple(sorted(new_cubes))
-                            
-                            # Get canonical form
+                            # Important: normalize before getting canonical form
+                            new_cubes = self.normalize_coordinates(new_cubes)
+                            # Get canonical form for proper de-duplication
                             canonical = self.get_canonical_form(new_cubes)
-                            
                             if canonical not in new_seen:
                                 new_seen.add(canonical)
                                 new_queue.append(new_cubes)
-            
+
             queue = new_queue
             seen = new_seen
             if size == n:
