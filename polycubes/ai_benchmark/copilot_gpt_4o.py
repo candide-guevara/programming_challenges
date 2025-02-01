@@ -25,6 +25,11 @@ from utils.common import *
 # Can you fix the program so that it runs and produce teh correct results?
 #
 # Result Attempt3: results are wrong
+#
+# Attempt4:
+# Ok now the program runs but does not return correct results. For example for 4 cubes it returns a count of 138, the correct value is 8. Looks like it is not de-duplicating the polycubes correctly. Can you correct the program?
+#
+# Result Attempt4: results are wrong
 
 # Define the possible moves to adjacent cubes (6 possible directions)
 moves = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
@@ -33,12 +38,18 @@ def is_valid(x, y, z, grid):
     """Check if the position is valid and unoccupied."""
     return 0 <= x < grid.shape[0] and 0 <= y < grid.shape[1] and 0 <= z < grid.shape[2] and grid[x, y, z] == 0
 
+def normalize_polycube(positions):
+    """Normalize the polycube to a canonical form."""
+    positions = np.array(list(positions))
+    min_coords = positions.min(axis=0)
+    positions -= min_coords
+    return frozenset(map(tuple, positions))
+
 def generate_polycubes(n, grid, x, y, z, remaining):
     """Generate all distinct polycubes of size n."""
     if remaining == 0:
-        # Convert the non-zero entries to a set of tuples representing the coordinates
         non_zero_positions = set(zip(*grid.nonzero()))
-        return {frozenset(non_zero_positions)}
+        return {normalize_polycube(non_zero_positions)}
     
     polycubes = set()
     for move in moves:
