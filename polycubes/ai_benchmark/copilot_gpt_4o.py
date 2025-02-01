@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import product
 import logging
 from utils.common import *
 
@@ -12,7 +13,7 @@ from utils.common import *
 # Attempt2:
 # The program you produced does not return correct results. For example for 4 cubes it returns a count of 150, the correct value is 8. can you correct the program?
 #
-# Result Attempt2: does not compile
+# Result Attempt2: does not run
 #
 # Attempt3:
 # The program you produced does not compile. I got the following error:
@@ -30,6 +31,11 @@ from utils.common import *
 # Ok now the program runs but does not return correct results. For example for 4 cubes it returns a count of 138, the correct value is 8. Looks like it is not de-duplicating the polycubes correctly. Can you correct the program?
 #
 # Result Attempt4: results are wrong
+#
+# Attempt5:
+# It is getting better but the program still does not return correct results. For example for 4 cubes it returns a count of 66, the correct value is 8. Looks like it is not de-duplicating the polycubes based on all possible rotation and mirror symmetries. Can you correct the program?
+#
+# Result Attempt5: does not run
 
 # Define the possible moves to adjacent cubes (6 possible directions)
 moves = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
@@ -38,11 +44,26 @@ def is_valid(x, y, z, grid):
     """Check if the position is valid and unoccupied."""
     return 0 <= x < grid.shape[0] and 0 <= y < grid.shape[1] and 0 <= z < grid.shape[2] and grid[x, y, z] == 0
 
+def rotate_3d(positions):
+    """Generate all rotations of a set of 3D positions."""
+    rotations = []
+    for perm in product([1, -1], repeat=3):
+        for axes in product(range(3), repeat=3):
+            if len(set(axes)) == 3:
+                rotated = np.dot(positions, np.diag(perm))[:, axes]
+                rotations.append(frozenset(map(tuple, rotated)))
+    return rotations
+
 def normalize_polycube(positions):
-    """Normalize the polycube to a canonical form."""
+    """Normalize the polycube to a canonical form considering all rotations and reflections."""
     positions = np.array(list(positions))
-    min_coords = positions.min(axis=0)
-    positions -= min_coords
+    min_positions = [normalize_position(pos) for pos in rotate_3d(positions)]
+    canonical_position = min(min_positions, key=lambda pos: tuple(sorted(pos)))
+    return canonical_position
+
+def normalize_position(positions):
+    """Normalize a set of positions by translating them to start from the origin."""
+    positions -= positions.min(axis=0)
     return frozenset(map(tuple, positions))
 
 def generate_polycubes(n, grid, x, y, z, remaining):
