@@ -1,0 +1,8 @@
+[package]
+name = "spelling_bee"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = "1.11"
+rand = "0.9"
