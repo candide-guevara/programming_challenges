@@ -12,7 +12,7 @@ fn benchmark(conf: &config::Config, words: &anagram::Anagram) {
   for i in 0..tries {
     game::from_words(&conf, &words).unwrap();
   }
-  println!("Bench (tries:{}) ran in {}secs", tries, now.elapsed().as_secs());
+  println!("Bench (tries:{}) ran in {}secs", tries, now.elapsed().as_secs_f32());
 }
 
 fn demo(conf: &config::Config, words: &anagram::Anagram) {

@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-regex = "1.11"
 rand = "0.9"
+regex = "1.11"
+rustc-hash = "2.1"
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles
 [profile.release]

@@ -7,9 +7,6 @@ use super::error::*;
 use rand;
 use rand::seq::IndexedRandom;
 use rand::seq::SliceRandom;
-use std::collections::BTreeSet;
-use std::collections::BTreeMap;
-use std::collections::btree_map::Entry::*;
 use std::fmt;
 use std::iter;
 use std::marker::PhantomData;
@@ -20,7 +17,7 @@ const kMinLen: usize = 4;
 pub struct Game<'a> {
   main: char,
   key: String,
-  solutions: BTreeMap::<usize, Vec<&'a str>>,
+  solutions: Vec::<Vec<&'a str>>,
 }
 struct Generator {
   main: char,
@@ -29,7 +26,6 @@ struct Generator {
 struct GeneratorIt<'a> {
   g: &'a Generator,
   p: PermutationIt<'a>,
-  s: BTreeSet<char>,
   i: usize,
 }
 struct PermutationIt<'a> {
@@ -59,11 +55,18 @@ impl Generator {
     };
   }
 
-  fn take_from_q_sorted(&self, s: &mut BTreeSet::<char>, i: usize) -> Vec<char> {
-    s.clear();
-    s.insert(self.main);
-    for j in 0..kGameLen-1 { s.insert(self.q[i + j]); }
-    return Vec::<char>::from_iter(s.iter().cloned());
+  fn reset(&mut self, main: char) {
+    let rng = &mut rand::rng();
+    for c in &mut self.q { if *c == main { *c = self.main; } }
+    self.main = main;
+    self.q.shuffle(rng);
+  }
+
+  fn take_from_q_sorted(&self, i: usize, out: &mut Vec<char>) {
+    out.clear();
+    out.push(self.main);
+    for j in &self.q[i..kGameLen+i-1] { out.push(*j); }
+    out.sort();
   }
 
   fn iter(&self) -> GeneratorIt {
@@ -73,23 +76,23 @@ impl Generator {
 
 impl<'a> GeneratorIt<'a> {
   fn new(g: &Generator) -> GeneratorIt {
-    let mut s = BTreeSet::<char>::new();
-    let v = g.take_from_q_sorted(&mut s, 0);
+    let mut v = Vec::<char>::with_capacity(kGameLen);
+    g.take_from_q_sorted(0, &mut v);
     return GeneratorIt {
       g: g,
       p: PermutationIt::new(g.main, v),
-      s: s,
       i: 0,
     };
   }
+  #[inline(always)]
   fn is_exhausted(&self) -> bool {
     return (self.g.q.len()-self.i) < (kGameLen-1);
   }
+  #[inline]
   fn advance(&mut self) -> bool {
     self.i += 1;
     if self.is_exhausted() { return false; }
-    let v = self.g.take_from_q_sorted(&mut self.s, self.i);
-    self.p = PermutationIt::new(self.g.main, v);
+    self.p.reset(self.g, self.i);
     return true;
   }
 }
@@ -98,10 +101,7 @@ impl<'a> iter::Iterator for GeneratorIt<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       if let Some(s) = self.p.next() { return Some(s); }
-      self.i += 1;
-      if self.is_exhausted() { return None; }
-      let v = self.g.take_from_q_sorted(&mut self.s, self.i);
-      self.p = PermutationIt::new(self.g.main,v);
+      if !self.advance() { return None; }
     } // loop
   }
 }
@@ -116,24 +116,31 @@ impl<'a> PermutationIt<'a> {
       i: kGameLen,
     };
   }
+  #[inline]
+  fn reset(&mut self, g: &Generator, i: usize) {
+    self.p.reset(kGameLen);
+    g.take_from_q_sorted(i, &mut self.a);
+    self.i = kGameLen;
+  }
 }
 impl<'a> iter::Iterator for PermutationIt<'a> {
   type Item = &'a str;
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       if self.i < kMinLen { return None; }
-      self.w.clear();
       if let Some(r) = self.p.next() {
         let mut has_main = false;
-        for j in r {
-          has_main |= self.main == self.a[*j];
-          self.w.push(self.a[*j]);
+        self.w.clear();
+        for &j in r {
+          let &c = unsafe { self.a.get_unchecked(j) };
+          has_main |= self.main == c;
+          self.w.push(c);
         }
         if !has_main { continue; }
         return as_some_eternal(&self.w);
       }
       self.i -= 1;
-      self.p = PickIt::new(self.i);
+      self.p.reset(self.i);
     } // loop
   }
 }
@@ -148,6 +155,13 @@ impl<'a> PickIt<'a> {
     };
     for i in 0..l { it.v.push(i); }
     return it;
+  }
+  #[inline]
+  fn reset(&mut self, l: usize) {
+    self.l = l;
+    self.f = true;
+    self.v.clear();
+    for i in 0..l { self.v.push(i); }
   }
 }
 impl<'a> iter::Iterator for PickIt<'a> {
@@ -173,28 +187,34 @@ impl<'a> Game<'a> {
     let mut game = Game {
       main: main,
       key: String::with_capacity(kGameLen*2),
-      solutions: BTreeMap::new(),
+      solutions: vec![Vec::new(); kGameLen+1],
     };
-    for k in kMinLen..=kGameLen { game.solutions.insert(k, Vec::new()); }
     return game;
   }
+  #[inline(always)]
   fn get_sol(&mut self, k: usize) -> &mut Vec<&'a str> {
-    return self.solutions.get_mut(&k).unwrap();
+    return unsafe { self.solutions.get_unchecked_mut(k) };
   }
   fn valid_generation(&mut self) -> bool {
-    for k in kMinLen..=kGameLen { self.get_sol(k).sort(); }
-    return self.solutions.iter()
-                         .all(|(k,v)| v.len() > 0);
+    let mut all_non_empty = true;
+    for v in &mut self.solutions[kMinLen..=kGameLen] {
+      v.sort();
+      all_non_empty &= v.len() != 0;
+    }
+    return all_non_empty;
   }
   fn reset(&mut self, key: &str, v: &Vec<&'a str>) {
-    assert!(v.len() > 0);
+    debug_assert!(v.len() > 0);
     self.key.clear();
     self.key.push_str(key);
-    for k in kMinLen..=kGameLen { self.get_sol(k).clear(); }
+    for v in &mut self.solutions[kMinLen..=kGameLen] {
+      v.clear();
+    }
     self.get_sol(kGameLen).extend(v.iter());
   }
+  #[inline(always)]
   fn add_sub_key(&mut self, key: &str, v: &Vec<&'a str>) {
-    assert!(v.len() > 0);
+    debug_assert!(v.len() > 0);
     self.get_sol(key.len()).extend(v.iter());
   }
 }
@@ -202,7 +222,8 @@ impl<'a> fmt::Display for Game<'a> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     writeln!(f, "main = {}", self.main);
     writeln!(f, "key = {}", self.key);
-    for (k,v) in self.solutions.iter().rev() {
+    for (k,v) in self.solutions.iter().enumerate() {
+      if v.len() == 0 { continue; }
       writeln!(f, "  {} = {:?}", k, v);
     }
     return Ok(());
@@ -274,13 +295,16 @@ pub fn from_words<'a>(conf: &config::Config, words: &'a anagram::Anagram)
                              .into_iter()
                              .take(conf.mid_letter_min_rank)
                              .collect::<Vec<char>>();
+  let main = *main_candidates.choose(rng).unwrap();
+  let mut generator = Generator::new(main);
+
   for tries in 1..10000 {
-    let main = *main_candidates.choose(rng).unwrap();
-    let generator = Generator::new(main);
     if let Ok(game) = from_words_once(conf, words, &generator) {
       return Ok(game);
     }
-    if tries % 1000 == 0 { println!("tries = {tries}..."); }
+    if tries % 1000 == 0 { println!("tries for {main} = {tries}..."); }
+    let main = *main_candidates.choose(rng).unwrap();
+    generator.reset(main);
   }
   return Error::new(Code::INTERNAL, "exhausted");
 }

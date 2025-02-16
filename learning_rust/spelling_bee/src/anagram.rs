@@ -4,15 +4,15 @@ use super::error::*;
 use super::util::*;
 
 use regex::Regex;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::collections::HashSet;
 use std::collections::hash_map::Entry::*;
 use std::fs::File;
 use std::io::prelude::*;
 
 pub struct Anagram<'a> {
-  pub letters_words: HashMap::<&'a str, Vec::<&'a str>>,  
-  pub letters_histo: HashMap::<char, u32>,  
+  pub letters_words: FxHashMap::<&'a str, Vec::<&'a str>>,
+  pub letters_histo: FxHashMap::<char, u32>,
   pub words: Vec::<String>,
   keys: Vec::<String>,
 }
@@ -20,7 +20,7 @@ pub struct Anagram<'a> {
 impl<'a> Anagram<'a> {
   fn push_word(&mut self, k: String, i: usize) {
     let k2 = as_eternal(k.as_str());
-    let v = as_eternal(self.words.get(i).unwrap());
+    let v = as_eternal(unsafe { self.words.get_unchecked(i) });
     match self.letters_words.entry(k2) {
       Occupied(mut e) => e.get_mut().push(v),
       Vacant(mut e)   => {
@@ -46,8 +46,8 @@ pub fn from_dict(conf: &config::Config) -> StatusOr::<Anagram> {
   let keys: Vec::<String> = words.iter()
                                  .map(to_unique_letters).collect();
   let mut anagram = Anagram{
-    letters_words: HashMap::with_capacity(cap),
-    letters_histo: HashMap::new(),
+    letters_words: FxHashMap::default(),
+    letters_histo: FxHashMap::default(),
     words: words,
     keys: Vec::with_capacity(cap),
   };

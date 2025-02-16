@@ -4,6 +4,8 @@
 
 [Game description](https://www.nytimes.com/2023/09/11/crosswords/getting-to-genius-part-1.html)
 
+Tips [for optimization](https://nnethercote.github.io/perf-book/title-page.html).
+
 ```
 rm /tmp/perf.data /tmp/flamegraph.html
 cargo build --release \
