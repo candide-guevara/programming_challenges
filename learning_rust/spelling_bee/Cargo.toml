@@ -6,3 +6,10 @@ edition = "2021"
 [dependencies]
 regex = "1.11"
 rand = "0.9"
+
+# https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles
+[profile.release]
+debug = true
+opt-level = 3
+overflow-checks = false
+
