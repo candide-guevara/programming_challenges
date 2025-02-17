@@ -17,3 +17,13 @@ cargo build --release \
     && google-chrome-stable /tmp/flamegraph.html)
 ```
 
+### Performance guided optimization workflow
+
+```
+# Tweak `config.toml` to collect profiles
+cargo run --profile optimized -- --benchmark
+llvm-profdata merge -o /tmp/pgo/merged.profdata /tmp/pgo
+# Tweak `config.toml` to use merged profile
+cargo run --profile optimized -- --benchmark
+```
+
