@@ -27,3 +27,7 @@ llvm-profdata merge -o /tmp/pgo/merged.profdata /tmp/pgo
 cargo run --profile optimized -- --benchmark
 ```
 
+## Code kata: Last digit of a huge number
+
+See [description](https://www.codewars.com/kata/5518a860a73e708c0a000027)
+
