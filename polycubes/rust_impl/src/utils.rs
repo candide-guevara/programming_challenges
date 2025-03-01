@@ -24,6 +24,13 @@ pub fn to_points(pc:&PolyCubeT, size:usize) -> Vec::<PointT> {
   return pc.iter().take(size).map(|c| idx_to_point(*c)).collect::<Vec::<PointT>>();
 }
 
+// Use only for testing
+pub fn vec_to_points(cubes:&Vec<PolyCubeT>, size:usize) -> Vec::<Vec::<PointT>> {
+  let mut v:Vec::<Vec::<PointT>> = cubes.iter().map(|c| to_points(c, size)).collect();
+  v.sort();
+  return v;
+}
+
 pub fn fmt_cube(cube: &[IdxT]) -> String {
   return cube.iter().map(|&i| format!("{:?}", idx_to_point(i)))
                     .collect::<Vec<String>>()
