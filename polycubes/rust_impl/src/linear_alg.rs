@@ -13,7 +13,7 @@ pub trait Alg {
   // We turn the cell index to its corresponding vector and rotate it.
   // Then we translate the rotated vector so that it land fully on the grid.
   // This only works for matrices in the group of 90deg rotations.
-  fn i_mul_and_shift(&self, rhs:IdxT) -> IdxT;
+  fn i_mul_and_offset(&self, rhs:IdxT) -> IdxT;
 }
 
 impl Alg for RotMatrixT {
@@ -39,13 +39,13 @@ impl Alg for RotMatrixT {
     return v;
   }
 
-  fn i_mul_and_shift(&self, rhs:IdxT) -> IdxT {
+  fn i_mul_and_offset(&self, rhs:IdxT) -> IdxT {
     let v = self.v_mul(&idx_to_point(rhs));
     let mut p = PointT::zeros();
     for (i,row) in self.iter().enumerate() {
-      let mut shift = 0;
-      for j in row { shift = if *j < 0 { MAX_COORD } else { 0 }; }
-      p[i] = shift + (v[i] as IdxT);
+      let mut offset = 0;
+      for j in row { offset = if *j < 0 { MAX_COORD } else { 0 }; }
+      p[i] = offset + (v[i] as IdxT);
       debug_assert!(p[i] <= MAX_COORD);
     }
     return point_to_idx(p);
@@ -74,11 +74,11 @@ fn mat_vector_multiply_test() {
 }
 
 #[test]
-fn i_mul_and_shift_test() {
+fn i_mul_and_offset_test() {
   let idx = point_to_idx([1,2,3]);
   let mi  = [[1,0,0], [0,1, 0], [0,0,1]];
   let mx  = [[1,0,0], [0,0,-1], [0,1,0]];
-  assert_eq!(mi.i_mul_and_shift(idx), idx);
-  assert_eq!(idx_to_point(mx.i_mul_and_shift(idx)), [1,MAX_COORD-3,2]);
+  assert_eq!(mi.i_mul_and_offset(idx), idx);
+  assert_eq!(idx_to_point(mx.i_mul_and_offset(idx)), [1,MAX_COORD-3,2]);
 }
 

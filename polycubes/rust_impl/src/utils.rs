@@ -1,12 +1,6 @@
 use std::collections::BinaryHeap;
 use super::constants::*;
 
-// The indexes for all adjacent cells right/left per dimension.
-pub type AdjCellsT = [IdxT; 2 * DIMS];
-// An offset which you can add to a cell index to shift it.
-// Offsets can be negative since we use modulo MAX_COORD arithmetic.
-pub type AdjOffsetT = [IdxT; 2 * DIMS];
-
 // Representation of IdxT when each coordinate is separated into its own variable.
 pub type PointT = [IdxT; DIMS];
 
