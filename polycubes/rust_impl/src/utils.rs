@@ -1,4 +1,6 @@
 use std::collections::BinaryHeap;
+
+use super::bloom::*;
 use super::constants::*;
 
 // Representation of IdxT when each coordinate is separated into its own variable.
@@ -20,7 +22,7 @@ pub fn build_cube(points:&[PointT]) -> PolyCubeT {
 }
 
 // Use only for testing
-pub fn to_points(pc:&PolyCubeT, size:usize) -> Vec::<PointT> {
+pub fn to_points(pc:&[IdxT], size:usize) -> Vec::<PointT> {
   return pc.iter().take(size).map(|c| idx_to_point(*c)).collect::<Vec::<PointT>>();
 }
 
@@ -29,17 +31,6 @@ pub fn vec_to_points(cubes:&Vec<PolyCubeT>, size:usize) -> Vec::<Vec::<PointT>> 
   let mut v:Vec::<Vec::<PointT>> = cubes.iter().map(|c| to_points(c, size)).collect();
   v.sort();
   return v;
-}
-
-pub fn fmt_cube(cube: &[IdxT]) -> String {
-  return cube.iter().map(|&i| format!("{:?}", idx_to_point(i)))
-                    .collect::<Vec<String>>()
-                    .join(", ");
-}
-#[test]
-fn fmt_cube_test() {
-  let s = fmt_cube(&[point_to_idx([1,2,3]), point_to_idx([4,5,6])]);
-  assert_eq!(s, "[1, 2, 3], [4, 5, 6]");
 }
 
 pub fn idx_to_point(idx: IdxT) -> PointT {
@@ -128,8 +119,10 @@ fn shift_to_origin_vec_test() {
 
 // Foreach cube sort its cells in descending order.
 // If a cube has any duplicated cell then it is discarted.
+// Uses a best-effort filter to remove dupe polycubes.
 // Returns the number of cubes written.
 pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize {
+  let mut bloom = Bloom::new();
   let mut heap = BinaryHeap::<IdxT>::with_capacity(CUBE_ARR_LEN);
   let mut write_i = 0;
   for read_i in 0..cubes.len() {
@@ -143,7 +136,9 @@ pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize 
       wcube[j] = c;
       j += 1;
     }
-    if j == size { write_i += 1; }
+    if j == size {
+      if !bloom.contains(wcube) { write_i += 1; }
+    }
     heap.clear();
   }
   debug_assert!(write_i > 0 && write_i <= cubes.len());
