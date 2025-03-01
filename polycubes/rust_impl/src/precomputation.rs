@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use super::constants::*;
-use super::utils::*;
 use super::linear_alg::*;
+use super::utils::*;
 
 // The indexes for all adjacent cells right/left per dimension.
 pub type AdjCellsT = [IdxT; 2 * DIMS];
@@ -71,13 +71,9 @@ fn adj_cells_and_offsets_for_idx_test() {
 
 fn calculate_group_90deg_rotations() -> Vec<RotMatrixT> {
   let mut matrices = HashSet::<RotMatrixT>::with_capacity(POSSIBLE_ROTATIONS);
-  let mi = [[1,0, 0], [0,1, 0], [0,0,1]];
-  let mx = [[1,0, 0], [0,0,-1], [0,1,0]];
-  let my = [[0,0,-1], [0,1, 0], [1,0,0]];
-  let mz = [[0,1, 0], [-1,0,0], [0,0,1]];
-  let x_rots = [mi, mx, mx.m_mul(&mx), mx.m_mul(&mx).m_mul(&mx)];
-  let y_rots = [mi, my, my.m_mul(&my), my.m_mul(&my).m_mul(&my)];
-  let z_rots = [mi, mz, mz.m_mul(&mz), mz.m_mul(&mz).m_mul(&mz)];
+  let x_rots = [MI, MX, MX.m_mul(&MX), MX.m_mul(&MX).m_mul(&MX)];
+  let y_rots = [MI, MY, MY.m_mul(&MY), MY.m_mul(&MY).m_mul(&MY)];
+  let z_rots = [MI, MZ, MZ.m_mul(&MZ), MZ.m_mul(&MZ).m_mul(&MZ)];
   for m0 in y_rots {
     for m1 in x_rots { matrices.insert(m0.m_mul(&m1)); }
   }
@@ -90,6 +86,14 @@ fn calculate_group_90deg_rotations() -> Vec<RotMatrixT> {
 fn calculate_group_90deg_rotations_test() {
   let matrices = calculate_group_90deg_rotations();
   assert_eq!(matrices.len(), POSSIBLE_ROTATIONS);
+
+  let mut mj = MI;
+  for _ in 0..4 {
+    assert!(matrices.iter().any(|m| *m == mj));
+    mj = mj.m_mul(&MX);
+  }
+  assert!(matrices.iter().any(|m| *m == MX.m_mul(&MY)));
+  assert!(matrices.iter().any(|m| *m == MZ.m_mul(&MY)));
 }
 
 pub fn precomputation() -> Precomputed {
@@ -106,7 +110,7 @@ pub fn precomputation_helper(l:usize) -> Precomputed {
     let (cells, offsets) = adj_cells_and_offsets_for_idx(i as IdxT);
     let mut rots = RotAndShiftT::zeros();
     for (j, m) in matrices.iter().enumerate() {
-      rots[j] = m.i_mul_and_offset(j as IdxT);
+      rots[j] = m.i_mul_and_offset(i as IdxT);
     }
 
     precomp.adj_cells.push(cells);
@@ -121,5 +125,21 @@ fn precomputation_test() {
   assert!(precomp.adj_cells.len() > 0);
   assert!(precomp.adj_offsets.len() > 0);
   assert!(precomp.rot_cells.len() > 0);
+
+  let cell = point_to_idx([1,0,0]) as usize;
+  let m = MAX_COORD;
+  let n = MAX_COORD-1;
+  let mut expect = vec![
+    [1,0,0], [1,m,0], [1,0,m], [1,m,m],
+    [n,0,0], [n,m,0], [n,0,m], [n,m,m],
+    [0,1,0], [m,1,0], [0,1,m], [m,1,m],
+    [0,n,0], [m,n,0], [0,n,m], [m,n,m],
+    [0,0,1], [m,0,1], [0,m,1], [m,m,1],
+    [0,0,n], [m,0,n], [0,m,n], [m,m,n],
+  ];
+  let mut r_points = to_points(&precomp.rot_cells[cell], POSSIBLE_ROTATIONS);
+  r_points.sort();
+  expect.sort();
+  assert_eq!(r_points, expect);
 }
 
