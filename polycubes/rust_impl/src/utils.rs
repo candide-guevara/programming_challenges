@@ -1,3 +1,7 @@
+#[cfg(all(feature="use_my_heap", not(feature="no_heap")))]
+use super::binary_heap::*;
+
+#[cfg(all(not(feature="use_my_heap"), not(feature="no_heap")))]
 use std::collections::BinaryHeap;
 
 use super::bloom::*;
@@ -27,10 +31,18 @@ pub fn to_points(pc:&[IdxT], size:usize) -> Vec::<PointT> {
 }
 
 // Use only for testing
-pub fn vec_to_points(cubes:&Vec<PolyCubeT>, size:usize) -> Vec::<Vec::<PointT>> {
+pub fn vec_to_points(cubes:&[PolyCubeT], size:usize) -> Vec::<Vec::<PointT>> {
   let mut v:Vec::<Vec::<PointT>> = cubes.iter().map(|c| to_points(c, size)).collect();
   v.sort();
   return v;
+}
+
+// Use only for testing
+pub fn pc_array_to_str(cubes:&[PolyCubeT], size:usize) -> String {
+  return vec_to_points(cubes, size).iter()
+                                   .map(|pc| format!("{:?}", pc))
+                                   .collect::<Vec<String>>()
+                                   .join("\n");
 }
 
 pub fn idx_to_point(idx: IdxT) -> PointT {
@@ -121,25 +133,62 @@ fn shift_to_origin_vec_test() {
 // If a cube has any duplicated cell then it is discarted.
 // Uses a best-effort filter to remove dupe polycubes.
 // Returns the number of cubes written.
+#[cfg(all(feature="use_my_heap", not(feature="no_heap")))]
+pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize {
+  let mut bloom = Bloom::new();
+  let mut heap = BinHeap::new();
+  let mut write_i = 0;
+  'outer: for read_i in 0..cubes.len() {
+    let rcube = &cubes[read_i];
+    heap.clear();
+    for c in &rcube[0..size] { heap.push(*c); }
+
+    let wcube = &mut cubes[write_i];
+    for k in 0..size {
+      wcube[k] = heap.pop();
+      if k != 0 && wcube[k-1] == wcube[k] { continue 'outer; }
+    }
+    if !bloom.contains(wcube) { write_i += 1; }
+  }
+  debug_assert!(write_i > 0 && write_i <= cubes.len());
+  return write_i;
+}
+#[cfg(all(not(feature="use_my_heap"), not(feature="no_heap")))]
 pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize {
   let mut bloom = Bloom::new();
   let mut heap = BinaryHeap::<IdxT>::with_capacity(CUBE_ARR_LEN);
   let mut write_i = 0;
-  for read_i in 0..cubes.len() {
+  'outer: for read_i in 0..cubes.len() {
     let rcube = &cubes[read_i];
+    heap.clear();
     heap.extend(&rcube[0..size]);
 
     let mut j = 0;
     let wcube = &mut cubes[write_i];
     while let Some(c) = heap.pop() {
-      if j != 0 && wcube[j-1] == c { break; }
+      if j != 0 && wcube[j-1] == c { continue 'outer; }
       wcube[j] = c;
       j += 1;
     }
-    if j == size {
-      if !bloom.contains(wcube) { write_i += 1; }
+    if !bloom.contains(wcube) { write_i += 1; }
+  }
+  debug_assert!(write_i > 0 && write_i <= cubes.len());
+  return write_i;
+}
+#[cfg(feature="no_heap")]
+pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize {
+  let mut bloom = Bloom::new();
+  let mut write_i = 0;
+  'outer: for read_i in 0..cubes.len() {
+    let rcube = &mut cubes[read_i];
+    //rcube[0..size].sort();
+    rcube[0..size].sort_by(|a, b| b.cmp(a));
+
+    for j in 0..size {
+      if j != 0 && rcube[j] == rcube[j-1] { continue 'outer; }
     }
-    heap.clear();
+    cubes[write_i] = cubes[read_i];
+    if !bloom.contains(&cubes[write_i]) { write_i += 1; }
   }
   debug_assert!(write_i > 0 && write_i <= cubes.len());
   return write_i;
@@ -153,7 +202,7 @@ fn sort_cube_cells_and_dedupe_test() {
   ];
   let uniq_count = sort_cube_cells_and_dedupe(&mut cubes, 2);
   assert_eq!(uniq_count, 2);
-  assert_eq!(to_points(&cubes[0], 3), vec![[1,5,3], [4,4,3], [1,2,3]]);
-  assert_eq!(to_points(&cubes[1], 3), vec![[2,5,2], [4,2,1], [1,2,6]]);
+  assert_eq!(to_points(&cubes[0], 2), vec![[1,5,3], [4,4,3]]);
+  assert_eq!(to_points(&cubes[1], 2), vec![[2,5,2], [4,2,1]]);
 }
 

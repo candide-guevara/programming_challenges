@@ -7,6 +7,8 @@ edition = "2021"
 rustc-hash = "2.1"
 
 [features]
+default = ["no_heap"]
 heap_funky = []
 use_my_heap = []
+no_heap = []
 
