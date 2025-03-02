@@ -1,4 +1,5 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
+use rustc_hash::*;
 
 use super::constants::*;
 use super::utils::*;
@@ -19,7 +20,7 @@ impl Bloom {
     return Bloom{ bitfield: Bits768T::zeros(), };
   }
   pub fn contains(&mut self, pc: &[IdxT]) -> bool {
-    let mut s = DefaultHasher::new();
+    let mut s = FxHasher::default();
     Hash::hash_slice(pc, &mut s);
     let h = s.finish();
     let mut have_it = true;

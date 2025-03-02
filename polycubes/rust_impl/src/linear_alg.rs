@@ -50,8 +50,8 @@ impl Alg for RotMatrixT {
     let mut p = PointT::zeros();
     for (i,row) in self.iter().enumerate() {
       let mut offset = 0;
-      for j in row { offset |= if *j < 0 { MAX_COORD } else { 0 }; }
-      p[i] = offset + (v[i] as IdxT);
+      for j in row { offset |= if *j < 0 { MAX_COORD as i32 } else { 0 }; }
+      p[i] = (offset + v[i]) as IdxT;
     }
     return point_to_idx(p);
   }

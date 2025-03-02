@@ -1,10 +1,11 @@
+mod binary_heap;
 mod bloom;
 mod constants;
 mod linear_alg;
 mod precomputation;
 mod utils;
 
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::slice;
 use std::time;
 
@@ -18,7 +19,7 @@ struct ScratchSpace {
   offsets: Vec<AdjOffsetT>,
   candidates: Vec<PolyCubeT>,
   rot_candidates: Vec<PolyCubeT>,
-  candidate_filter: HashSet<PolyCubeT>,
+  candidate_filter: FxHashSet<PolyCubeT>,
   new_cubes: Vec<PolyCubeT>,
   all_cubes: Vec<PolyCubeT>,
 }
@@ -59,9 +60,9 @@ impl ScratchSpace {
       offsets: Vec::<AdjOffsetT>::with_capacity(MAX_SIZE),
       candidates: Vec::<PolyCubeT>::with_capacity(2*DIMS*MAX_SIZE),
       rot_candidates: Vec::<PolyCubeT>::with_capacity(POSSIBLE_ROTATIONS),
-      candidate_filter: HashSet::<PolyCubeT>::with_capacity(IDX_MAX * MAX_SIZE),
+      candidate_filter: FxHashSet::<PolyCubeT>::default(),
       new_cubes: Vec::<PolyCubeT>::with_capacity(2*DIMS*MAX_SIZE),
-      all_cubes: Vec::<PolyCubeT>::with_capacity(2usize.pow(64)),
+      all_cubes: Vec::<PolyCubeT>::with_capacity(2usize.pow(16)),
     };
   }
 }
@@ -154,7 +155,7 @@ fn next_polycubes_of_size_test() {
   for size in 1..5 {
     let all_cubes = scratch.all_cubes.clone();
     next_polycubes_of_size(&all_cubes, size, &precomp, &mut scratch);
-    assert_eq!(scratch.all_cubes.len(), expect[size-1], "for size={}", size);
+    assert_eq!(scratch.all_cubes.len(), expect[size-1], "for size={}", size+1);
   }
 }
 
@@ -163,10 +164,12 @@ fn main() {
   let mut scratch = ScratchSpace::new();
   scratch.all_cubes.push(PolyCubeT::zeros());
 
-  for size in 1..MAX_SIZE {
+  for size in 1..10 {
     let now = time::Instant::now();
     let all_cubes = scratch.all_cubes.clone();
     next_polycubes_of_size(&all_cubes, size, &precomp, &mut scratch);
-    println!("size={} cubes={}, secs={}", size+1, scratch.all_cubes.len(), now.elapsed().as_secs_f32());
+    println!("size={} cubes={}, secs={}",
+             size+1, scratch.all_cubes.len(), now.elapsed().as_secs_f32());
   }
 }
+
