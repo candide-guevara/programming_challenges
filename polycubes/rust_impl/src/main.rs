@@ -6,6 +6,8 @@ mod precomputation;
 mod utils;
 
 use rustc_hash::FxHashSet;
+use std::sync::{Arc, mpsc};
+use std::thread;
 use std::slice;
 use std::time;
 
@@ -15,16 +17,18 @@ use utils::*;
 
 // Scratch space needed to compute candidates and dedupe them.
 // Re-used to minimize allocations.
-struct ScratchSpace {
+struct ConsumerScratch {
   offsets: Vec<AdjOffsetT>,
   candidates: Vec<PolyCubeT>,
+}
+struct ProducerScratch {
   rot_candidates: Vec<PolyCubeT>,
   candidate_filter: FxHashSet<PolyCubeT>,
   new_cubes: Vec<PolyCubeT>,
   all_cubes: Vec<PolyCubeT>,
 }
 
-impl ScratchSpace {
+impl ConsumerScratch {
   fn fill_candidates_with(&mut self, seed: &PolyCubeT, size: usize) {
     self.candidates.clear();
     self.candidates.resize(2*DIMS*size, *seed);
@@ -38,6 +42,22 @@ impl ScratchSpace {
       self.offsets[j] = precomp.adj_offsets[seed[j] as usize];
     }
   }
+  fn append_adj_to_cubes(&mut self, size: usize, precomp: &Precomputed) {
+    for i in 0..size {
+      let adj_i = self.candidates[0][i] as usize;
+      for j in 0..(2*DIMS) {
+        self.candidates[2*DIMS*i+j][size] = precomp.adj_cells[adj_i][j];
+      }
+    }
+  }
+  fn new() -> ConsumerScratch {
+    return ConsumerScratch {
+      offsets: Vec::<AdjOffsetT>::with_capacity(MAX_SIZE),
+      candidates: Vec::<PolyCubeT>::with_capacity(2*DIMS*MAX_SIZE),
+    };
+  }
+}
+impl ProducerScratch {
   fn select_rotations(&mut self, seed: &PolyCubeT, size: usize, precomp: &Precomputed) {
     self.rot_candidates.clear();
     self.rot_candidates.resize(POSSIBLE_ROTATIONS, PolyCubeT::zeros());
@@ -47,18 +67,8 @@ impl ScratchSpace {
       }
     }
   }
-  fn append_adj_to_cubes(&mut self, size: usize, precomp: &Precomputed) {
-    for i in 0..size {
-      let adj_i = self.candidates[0][i] as usize;
-      for j in 0..(2*DIMS) {
-        self.candidates[2*DIMS*i+j][size] = precomp.adj_cells[adj_i][j];
-      }
-    }
-  }
-  fn new() -> ScratchSpace {
-    return ScratchSpace {
-      offsets: Vec::<AdjOffsetT>::with_capacity(MAX_SIZE),
-      candidates: Vec::<PolyCubeT>::with_capacity(2*DIMS*MAX_SIZE),
+  fn new() -> ProducerScratch {
+    return ProducerScratch {
       rot_candidates: Vec::<PolyCubeT>::with_capacity(POSSIBLE_ROTATIONS),
       candidate_filter: FxHashSet::<PolyCubeT>::default(),
       new_cubes: Vec::<PolyCubeT>::with_capacity(2*DIMS*MAX_SIZE),
@@ -68,7 +78,7 @@ impl ScratchSpace {
 }
 
 // From `seed` derive all possible polycubes of `size+1` which result from adding an adjacent cell.
-fn propose_candidates(seed: &PolyCubeT, size:usize, precomp: &Precomputed, scratch:&mut ScratchSpace) {
+fn propose_candidates(seed: &PolyCubeT, size:usize, precomp: &Precomputed, scratch:&mut ConsumerScratch) {
   scratch.fill_candidates_with(seed, size);
   scratch.select_offsets(seed, size, precomp);
   scratch.append_adj_to_cubes(size, precomp);
@@ -84,7 +94,7 @@ fn propose_candidates(seed: &PolyCubeT, size:usize, precomp: &Precomputed, scrat
 fn propose_candidates_test() {
   let seed = build_cube(&[[1,0,0], [0,0,0]]);
   let precomp = precomputation_helper(point_to_idx([3,3,3]) as usize);
-  let mut scratch = ScratchSpace::new();
+  let mut scratch = ConsumerScratch::new();
   propose_candidates(&seed, 2, &precomp, &mut scratch);
   let mut expect = vec![
     [[2,0,0], [1,0,0], [0,0,0]],
@@ -104,7 +114,7 @@ fn propose_candidates_test() {
 // For each `self.candidates` computes all possible rotations.
 // Add each rotated polycube to the set of previously seen polycubes.
 // If no rotated version was ever seen before, this is a new polycube.
-fn filter_candidates(candidates: &[PolyCubeT], size: usize, precomp: &Precomputed, scratch:&mut ScratchSpace) {
+fn filter_candidates(candidates: &[PolyCubeT], size: usize, precomp: &Precomputed, scratch:&mut ProducerScratch) {
   scratch.new_cubes.clear();
   for candidate in candidates {
     scratch.select_rotations(&candidate, size, precomp);
@@ -127,7 +137,7 @@ fn filter_candidates_test() {
     build_cube(&[[1,1,0], [0,1,0], [0,0,0]]),
   ];
   let precomp = precomputation_helper(point_to_idx([3,3,3]) as usize);
-  let mut scratch = ScratchSpace::new();
+  let mut scratch = ProducerScratch::new();
   filter_candidates(&seeds, 3, &precomp, &mut scratch);
   let mut expect = vec![
     [[1,1,0], [1,0,0], [0,0,0]],
@@ -137,39 +147,57 @@ fn filter_candidates_test() {
   assert_eq!(vec_to_points(&scratch.new_cubes, 3), expect);
 }
 
-fn next_polycubes_of_size(seeds: &[PolyCubeT], size: usize, precomp: &Precomputed, scratch:&mut ScratchSpace) {
-  scratch.all_cubes.clear();
-  scratch.candidate_filter.clear();
-  for seed in seeds {
-    propose_candidates(&seed, size, &precomp, scratch);
-    filter_candidates(&scratch.candidates.clone(), size+1, &precomp, scratch);
-    scratch.all_cubes.append(&mut scratch.new_cubes);
-  }
+fn next_polycubes_of_size(seeds: Vec<PolyCubeT>, size: usize,
+                          precomp: Arc<Precomputed>) -> Vec<PolyCubeT> {
+  let (tx, rx) = mpsc::channel();
+  let (final_tx, final_rx) = mpsc::channel();
+  let precomp1 = Arc::clone(&precomp);
+  let precomp2 = Arc::clone(&precomp);
+
+  let producer_t = thread::spawn(move || {
+    let mut scratch = ConsumerScratch::new();
+    for seed in seeds {
+      propose_candidates(&seed, size, &precomp1, &mut scratch);
+      tx.send(scratch.candidates.clone()).unwrap();
+    }
+  });
+
+  let consumer_t = thread::spawn(move || {
+    let mut scratch = ProducerScratch::new();
+    for candidates in rx {
+      filter_candidates(&candidates, size+1, &precomp2, &mut scratch);
+      scratch.all_cubes.append(&mut scratch.new_cubes);
+    }
+    final_tx.send(scratch.all_cubes).unwrap();
+  });
+
+  let r = final_rx.recv().unwrap();
+  producer_t.join().unwrap();
+  consumer_t.join().unwrap();
+  return r;
 }
 #[test]
 fn next_polycubes_of_size_test() {
   let precomp = precomputation_helper(point_to_idx([4,4,4]) as usize);
-  let mut scratch = ScratchSpace::new();
-  scratch.all_cubes.push(PolyCubeT::zeros());
+  let precomp = Arc::new(precomp);
+  let mut seeds = vec![PolyCubeT::zeros()];
+
   let expect = [1,2,8,29];
   for size in 1..5 {
-    let all_cubes = scratch.all_cubes.clone();
-    next_polycubes_of_size(&all_cubes, size, &precomp, &mut scratch);
-    assert_eq!(scratch.all_cubes.len(), expect[size-1], "for size={}", size+1);
+    seeds = next_polycubes_of_size(seeds.clone(), size, Arc::clone(&precomp));
+    assert_eq!(seeds.len(), expect[size-1], "for size={}", size+1);
   }
 }
 
 fn main() {
-  let precomp = precomputation();
-  let mut scratch = ScratchSpace::new();
-  scratch.all_cubes.push(PolyCubeT::zeros());
+  let precomp = Arc::new(precomputation());
+  let mut seeds = vec![PolyCubeT::zeros()];
 
-  for size in 1..10 {
+  for size in 1..MAX_SIZE {
     let now = time::Instant::now();
-    let all_cubes = scratch.all_cubes.clone();
-    next_polycubes_of_size(&all_cubes, size, &precomp, &mut scratch);
+    seeds = next_polycubes_of_size(seeds.clone(), size, Arc::clone(&precomp));
     println!("size={} cubes={}, secs={}",
-             size+1, scratch.all_cubes.len(), now.elapsed().as_secs_f32());
+             size+1, seeds.len(), now.elapsed().as_secs_f32());
   }
 }
 
