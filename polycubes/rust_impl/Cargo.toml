@@ -11,4 +11,5 @@ default = ["no_heap"]
 heap_funky = []
 use_my_heap = []
 no_heap = []
+no_bloom = []
 

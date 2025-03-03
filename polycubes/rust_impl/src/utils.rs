@@ -3,6 +3,7 @@ use super::binary_heap::*;
 
 #[cfg(all(not(feature="use_my_heap"), not(feature="no_heap")))]
 use std::collections::BinaryHeap;
+use rustc_hash::FxHashSet;
 
 use super::bloom::*;
 use super::constants::*;
@@ -38,11 +39,17 @@ pub fn vec_to_points(cubes:&[PolyCubeT], size:usize) -> Vec::<Vec::<PointT>> {
 }
 
 // Use only for testing
+pub fn vec_to_uniq_points(cubes:&[PolyCubeT], size:usize) -> Vec::<Vec::<PointT>> {
+  let v:FxHashSet::<PolyCubeT> = cubes.iter().map(|pc| *pc).collect();
+  return vec_to_points(&v.into_iter().collect::<Vec::<PolyCubeT>>(), size);
+}
+
+// Use only for testing
 pub fn pc_array_to_str(cubes:&[PolyCubeT], size:usize) -> String {
-  return vec_to_points(cubes, size).iter()
-                                   .map(|pc| format!("{:?}", pc))
-                                   .collect::<Vec<String>>()
-                                   .join("\n");
+  return cubes.iter().map(|c| to_points(c, size))
+                     .map(|pc| format!("{:?}", pc))
+                     .collect::<Vec<String>>()
+                     .join("\n");
 }
 
 pub fn idx_to_point(idx: IdxT) -> PointT {
@@ -121,12 +128,16 @@ pub fn shift_to_origin_vec(cubes: &mut [PolyCubeT], size:usize) {
 #[test]
 fn shift_to_origin_vec_test() {
   let mut cubes = [
-    build_cube(&[[1,5,3], [4,4,3], [1,2,3]]),
-    build_cube(&[[4,2,6], [2,5,2], [1,2,3]]),
+    build_cube(&[[1,5,3], [4,4,3], [4,4,3], [1,2,3]]),
+    build_cube(&[[4,2,6], [2,5,2], [2,5,2], [1,2,3]]),
+    build_cube(&[[14,15,14], [14,15,15], [15,15,15]]),
+    build_cube(&[[14,0,14], [14,15,0], [0,15,15]]),
   ];
-  shift_to_origin_vec(&mut cubes, 2);
-  assert_eq!(to_points(&cubes[0], 3), vec![[0,1,0], [3,0,0], [1,2,3]]);
-  assert_eq!(to_points(&cubes[1], 3), vec![[2,0,4], [0,3,0], [1,2,3]]);
+  shift_to_origin_vec(&mut cubes, 3);
+  assert_eq!(to_points(&cubes[0], 4), vec![[0,1,0], [3,0,0], [3,0,0], [1,2,3]]);
+  assert_eq!(to_points(&cubes[1], 3), vec![[2,0,4], [0,3,0], [0,3,0]]);
+  assert_eq!(to_points(&cubes[2], 3), vec![[0,0,0], [0,0,1], [1,0,1]]);
+  assert_eq!(to_points(&cubes[3], 3), vec![[14,0,14], [14,15,0], [0,15,15]]);
 }
 
 // Foreach cube sort its cells in descending order.
@@ -135,7 +146,7 @@ fn shift_to_origin_vec_test() {
 // Returns the number of cubes written.
 #[cfg(all(feature="use_my_heap", not(feature="no_heap")))]
 pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize {
-  let mut bloom = Bloom::new();
+  let mut bloom = Bloom::default();
   let mut heap = BinHeap::new();
   let mut write_i = 0;
   'outer: for read_i in 0..cubes.len() {
@@ -148,14 +159,14 @@ pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize 
       wcube[k] = heap.pop();
       if k != 0 && wcube[k-1] == wcube[k] { continue 'outer; }
     }
-    if !bloom.contains(wcube) { write_i += 1; }
+    if bloom.insert(wcube) { write_i += 1; }
   }
   debug_assert!(write_i > 0 && write_i <= cubes.len());
   return write_i;
 }
 #[cfg(all(not(feature="use_my_heap"), not(feature="no_heap")))]
 pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize {
-  let mut bloom = Bloom::new();
+  let mut bloom = Bloom::default();
   let mut heap = BinaryHeap::<IdxT>::with_capacity(CUBE_ARR_LEN);
   let mut write_i = 0;
   'outer: for read_i in 0..cubes.len() {
@@ -170,14 +181,14 @@ pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize 
       wcube[j] = c;
       j += 1;
     }
-    if !bloom.contains(wcube) { write_i += 1; }
+    if bloom.insert(wcube) { write_i += 1; }
   }
   debug_assert!(write_i > 0 && write_i <= cubes.len());
   return write_i;
 }
 #[cfg(feature="no_heap")]
 pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize {
-  let mut bloom = Bloom::new();
+  let mut bloom = Bloom::default();
   let mut write_i = 0;
   'outer: for read_i in 0..cubes.len() {
     let rcube = &mut cubes[read_i];
@@ -188,7 +199,7 @@ pub fn sort_cube_cells_and_dedupe(cubes: &mut [PolyCubeT], size:usize) -> usize 
       if j != 0 && rcube[j] == rcube[j-1] { continue 'outer; }
     }
     cubes[write_i] = cubes[read_i];
-    if !bloom.contains(&cubes[write_i]) { write_i += 1; }
+    if bloom.insert(&cubes[write_i]) { write_i += 1; }
   }
   debug_assert!(write_i > 0 && write_i <= cubes.len());
   return write_i;
