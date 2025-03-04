@@ -1,4 +1,3 @@
-#[cfg(not(feature="no_bloom"))]
 use std::hash::{Hash, Hasher};
 use rustc_hash::*;
 
@@ -12,12 +11,10 @@ const BUCKET_U64_LEN:u64 = 3;
 const FRAGMENT_MASK:u64 = 2u64.pow(BUCKET_BIT_LEN as u32) - 1;
 
 // Poor man's bloom filter. Fixed capacity.
-#[cfg(not(feature="no_bloom"))]
 pub struct Bloom {
   bitfield: Bits768T,
 }
 
-#[cfg(not(feature="no_bloom"))]
 impl Bloom {
   pub fn default() -> Bloom {
     return Bloom{ bitfield: Bits768T::zeros(), };
@@ -38,22 +35,6 @@ impl Bloom {
   }
   pub fn clear(&mut self) {
     self.bitfield = Bits768T::zeros();
-  }
-}
-
-#[cfg(feature="no_bloom")]
-pub struct Bloom(FxHashSet<PolyCubeT>);
-
-#[cfg(feature="no_bloom")]
-impl Bloom {
-  pub fn default() -> Bloom {
-    return Bloom(FxHashSet::<PolyCubeT>::default());
-  }
-  pub fn insert(&mut self, pc: &PolyCubeT) -> bool {
-    return self.0.insert(*pc);
-  }
-  pub fn clear(&mut self) {
-    self.0.clear();
   }
 }
 

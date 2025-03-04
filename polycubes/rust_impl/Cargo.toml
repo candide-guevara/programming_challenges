@@ -7,9 +7,10 @@ edition = "2021"
 rustc-hash = "2.1"
 
 [features]
-default = ["no_heap"]
+default = ["use_sort_and_hash"]
 heap_funky = []
 use_my_heap = []
-no_heap = []
-no_bloom = []
+use_bin_heap = []
+use_sort_and_hash = []
+use_double_sort = []
 
