@@ -17,6 +17,16 @@ from utils.common import *
 #
 # Result Attempt2: The server is busy. Please try again later. [3 times]
 # Result Attempt2: results are wrong
+#
+# Attempt3: ENABLED deepthink
+# This is new version is an improvement but the program still does not return correct results.
+# For example for 4 cubes it returns a count of 12, the correct value is 8.
+# Looks like it is not de-duplicating the polycubes based on all rotation, reflection and translation transformations.
+# Can you fix the program?
+#
+# Result Attempt3:
+#
+# Timed out, could not get an answer...
 
 # Precompute all 48 possible symmetry transformations (rotations + reflections)
 def generate_symmetries():
