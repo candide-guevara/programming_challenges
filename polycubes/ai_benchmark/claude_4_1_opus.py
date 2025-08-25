@@ -39,64 +39,127 @@ from utils.common import *
 #
 # Can you have another try at fixing the program?
 #
-# Result Attempt3: results are wrong
+# Result Attempt3: results are wrong (exact same flawed values)
+#
+# Attempt4:
+# Same flawed results. Here is the output of debug_tetracubes:
+#
+#Found 7 unique tetracubes:
+#
+#straight: 1 polycube(s)
+# straight #1:
+#
+#Polycube visualization:
+#Layer z=0:
+# ■
+#
+#Layer z=1:
+#...
+#
+# Can you deduce what is wrong from the debug output and fix it?
+#
+# Result Attempt4: results are wrong (exact same flawed values)
 
 class PolycubeCounter:
   def __init__(self):
-    # Generate all 48 symmetries (24 rotations + 24 reflections)
-    self.symmetries = self._generate_all_symmetries()
-  
-  def _generate_all_symmetries(self):
+    # Generate all 48 symmetries of the cube (24 rotations + 24 reflections)
+    self.symmetries = self._generate_cube_symmetries()
+
+  def _generate_cube_symmetries(self):
     """
-    Generate all 48 symmetry operations for a cube (including reflections).
-    This includes all combinations of:
-    - Permutations of axes (6 possibilities)
-    - Sign changes (8 possibilities)
-    But only those that preserve handedness (24) or reverse it (24).
+    Generate all 48 symmetry transformations of a cube.
+    This includes 24 rotational symmetries and 24 reflection symmetries.
     """
     symmetries = []
-    
-    # Generate all possible combinations
-    for perm in permutations([0, 1, 2]):
-      for signs in product([-1, 1], repeat=3):
-        matrix = np.zeros((3, 3), dtype=int)
-        for i, (j, sign) in enumerate(zip(perm, signs)):
-          matrix[i, j] = sign
-        
-        # Check if this is a valid rotation or reflection
-        det = np.linalg.det(matrix)
-        if abs(det - 1) < 0.1 or abs(det + 1) < 0.1: # det = ±1
-          symmetries.append(matrix)
-    
+
+    # Generate the 24 rotational symmetries
+    # For each of 6 face orientations, we have 4 rotations around that face
+
+    # Identity and rotations around z-axis (0, 90, 180, 270 degrees)
+    for k in range(4):
+      angle = k * np.pi / 2
+      c, s = int(np.cos(angle)), int(np.sin(angle))
+      symmetries.append(np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=int))
+
+    # x face up (90 degree rotation around y-axis), then 4 rotations
+    for k in range(4):
+      angle = k * np.pi / 2
+      c, s = int(np.cos(angle)), int(np.sin(angle))
+      base = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]], dtype=int)
+      rot_z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=int)
+      symmetries.append(base @ rot_z)
+
+    # -x face up (270 degree rotation around y-axis), then 4 rotations
+    for k in range(4):
+      angle = k * np.pi / 2
+      c, s = int(np.cos(angle)), int(np.sin(angle))
+      base = np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]], dtype=int)
+      rot_z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=int)
+      symmetries.append(base @ rot_z)
+
+    # y face up (90 degree rotation around x-axis), then 4 rotations
+    for k in range(4):
+      angle = k * np.pi / 2
+      c, s = int(np.cos(angle)), int(np.sin(angle))
+      base = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=int)
+      rot_z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=int)
+      symmetries.append(base @ rot_z)
+
+    # -y face up (270 degree rotation around x-axis), then 4 rotations
+    for k in range(4):
+      angle = k * np.pi / 2
+      c, s = int(np.cos(angle)), int(np.sin(angle))
+      base = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], dtype=int)
+      rot_z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=int)
+      symmetries.append(base @ rot_z)
+
+    # -z face up (180 degree rotation around x-axis), then 4 rotations
+    for k in range(4):
+      angle = k * np.pi / 2
+      c, s = int(np.cos(angle)), int(np.sin(angle))
+      base = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]], dtype=int)
+      rot_z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=int)
+      symmetries.append(base @ rot_z)
+
+    # Also include reflections - for polycubes we need to check mirror images
+    # Add a reflection (e.g., flip x-coordinate)
+    num_rotations = len(symmetries)
+    for i in range(num_rotations):
+      reflected = symmetries[i] @ np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=int)
+      symmetries.append(reflected)
+
     return symmetries
-  
+
   def _canonical_form(self, cubes: List[Tuple[int, int, int]]) -> Tuple[Tuple[int, ...], ...]:
     """
-    Find the canonical (lexicographically smallest) representation of a polycube
-    under all symmetry operations.
+    Find the canonical (lexicographically smallest) representation of a polycube.
     """
-    cubes_array = np.array(cubes)
+    if not cubes:
+      return tuple()
+
+    cubes_array = np.array(cubes, dtype=int)
     min_representation = None
-    
+
     for symmetry in self.symmetries:
-      # Apply symmetry transformation
-      transformed = (cubes_array @ symmetry.T)
-      
-      # Normalize: translate so min coordinates are at origin
-      transformed -= transformed.min(axis=0)
-      
-      # Sort lexicographically
-      order = np.lexsort((transformed[:, 2], transformed[:, 1], transformed[:, 0]))
-      sorted_cubes = transformed[order]
-      
-      # Convert to tuple for comparison
-      representation = tuple(map(tuple, sorted_cubes.tolist()))
-      
+      # Apply transformation
+      transformed = cubes_array @ symmetry.T
+
+      # Translate so that minimum coordinates are at origin
+      transformed = transformed - transformed.min(axis=0)
+
+      # Sort lexicographically: first by x, then y, then z
+      indices = np.lexsort((transformed[:, 2], transformed[:, 1], transformed[:, 0]))
+      sorted_cubes = transformed[indices]
+
+      # Convert to tuple representation
+      representation = tuple(tuple(cube) for cube in sorted_cubes)
+
+      # Keep the lexicographically smallest representation
       if min_representation is None or representation < min_representation:
         min_representation = representation
-    
+
     return min_representation
-  
+
   def _get_neighbors(self, cube: Tuple[int, int, int]) -> List[Tuple[int, int, int]]:
     """Get all 6 face-adjacent neighbors of a cube."""
     x, y, z = cube
@@ -105,101 +168,92 @@ class PolycubeCounter:
       (x, y+1, z), (x, y-1, z),
       (x, y, z+1), (x, y, z-1)
     ]
-  
+
   def generate_polycubes(self, n: int) -> Set[Tuple[Tuple[int, ...], ...]]:
-    """
-    Generate all unique polycubes with n unit cubes.
-    Returns a set of canonical representations.
-    """
+    """Generate all unique polycubes with n unit cubes."""
     if n == 1:
       return {((0, 0, 0),)}
-    
-    # Start with all polycubes of size n-1
-    smaller_polycubes = self.generate_polycubes(n - 1)
+
+    # Build from smaller polycubes
+    prev_polycubes = self.generate_polycubes(n - 1)
     new_polycubes = set()
-    
-    for poly in smaller_polycubes:
-      poly_list = list(poly)
-      poly_set = set(poly_list)
-      
-      # Find all adjacent empty positions
+
+    for poly in prev_polycubes:
+      cubes = list(poly)
+      cube_set = set(cubes)
+
+      # Find all empty neighboring positions
       candidates = set()
-      for cube in poly_list:
+      for cube in cubes:
         for neighbor in self._get_neighbors(cube):
-          if neighbor not in poly_set:
+          if neighbor not in cube_set:
             candidates.add(neighbor)
-      
-      # Try adding each candidate cube
+
+      # Try adding each candidate
       for candidate in candidates:
-        new_poly = poly_list + [candidate]
-        canonical = self._canonical_form(new_poly)
+        extended_poly = cubes + [candidate]
+        canonical = self._canonical_form(extended_poly)
         new_polycubes.add(canonical)
-    
+
     return new_polycubes
-  
+
   def count_polycubes(self, n: int) -> int:
     """Count the number of distinct polycubes with n unit cubes."""
     return len(self.generate_polycubes(n))
-  
+
   def count_polycubes_up_to(self, max_n: int) -> List[int]:
-    """
-    Count polycubes for all sizes from 1 to max_n.
-    More efficient than calling count_polycubes repeatedly.
-    """
+    """Count polycubes for all sizes from 1 to max_n."""
     if max_n < 1:
       return []
-    
+
     counts = []
-    current_polycubes = {((0, 0, 0),)}
+    polycubes = {((0, 0, 0),)} # Start with single cube
     counts.append(1)
-    
+
     for n in range(2, max_n + 1):
       with print_time(""):
         new_polycubes = set()
-        
-        for poly in current_polycubes:
-          poly_list = list(poly)
-          poly_set = set(poly_list)
-          
-          # Find all adjacent empty positions
+
+        for poly in polycubes:
+          cubes = list(poly)
+          cube_set = set(cubes)
+
+          # Find all empty neighboring positions
           candidates = set()
-          for cube in poly_list:
+          for cube in cubes:
             for neighbor in self._get_neighbors(cube):
-              if neighbor not in poly_set:
+              if neighbor not in cube_set:
                 candidates.add(neighbor)
-          
-          # Try adding each candidate cube
+
+          # Try adding each candidate
           for candidate in candidates:
-            new_poly = poly_list + [candidate]
-            canonical = self._canonical_form(new_poly)
+            extended_poly = cubes + [candidate]
+            canonical = self._canonical_form(extended_poly)
             new_polycubes.add(canonical)
-        
-        current_polycubes = new_polycubes
-        count = len(current_polycubes)
-        counts.append(count)
+
+        polycubes = new_polycubes
+        counts.append(len(polycubes))
       logging.info("size=%d, count=%d", n, counts[-1])
       is_ok(n, counts[-1])
-    
+
     return counts
-  
-  def visualize_polycube(self, polycube: Tuple[Tuple[int, ...], ...]):
-    """
-    ASCII visualization of a polycube shown layer by layer.
-    """
+
+  def visualize_polycube(self, polycube):
+    """ASCII visualization of a polycube."""
     if not polycube:
       return
-    
+
     cubes = list(polycube)
     xs = [c[0] for c in cubes]
     ys = [c[1] for c in cubes]
     zs = [c[2] for c in cubes]
-    
+
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
     min_z, max_z = min(zs), max(zs)
-    
+
     cube_set = set(cubes)
-    
+
     print("\nPolycube visualization:")
     for z in range(min_z, max_z + 1):
       print(f"Layer z={z}:")
@@ -212,74 +266,28 @@ class PolycubeCounter:
             row += "· "
         print(" " + row)
       print()
-  
+
   def debug_tetracubes(self):
-    """
-    Debug function to show all tetracubes and help identify missing ones.
-    """
+    """Debug function to show all tetracubes."""
     tetracubes = self.generate_polycubes(4)
     print(f"\nFound {len(tetracubes)} unique tetracubes:")
-    
-    # Categorize by shape characteristics
-    shapes = {
-      'straight': [],  # I-shape: 4 in a line
-      'L-shape': [],   # L-shape
-      'T-shape': [],   # T-shape
-      'Z-shape': [],   # Z or S shape
-      'square': [],   # 2x2 flat square
-      'corner': [],   # 3D corner shape
-      'other': []
-    }
-    
-    for poly in tetracubes:
+
+    for i, poly in enumerate(tetracubes, 1):
+      print(f"\nTetracube #{i}:")
+      self.visualize_polycube(poly)
+
+      # Show some properties
       cubes = list(poly)
       xs = [c[0] for c in cubes]
       ys = [c[1] for c in cubes]
       zs = [c[2] for c in cubes]
-      
+
       x_range = max(xs) - min(xs) + 1
       y_range = max(ys) - min(ys) + 1
       z_range = max(zs) - min(zs) + 1
-      
-      dims = sorted([x_range, y_range, z_range])
-      
-      if dims == [1, 1, 4]:
-        shapes['straight'].append(poly)
-      elif dims == [1, 2, 2]:
-        shapes['square'].append(poly)
-      elif dims == [1, 2, 3]:
-        # Could be L or T
-        if self._is_T_shape(cubes):
-          shapes['T-shape'].append(poly)
-        else:
-          shapes['L-shape'].append(poly)
-      elif dims == [2, 2, 2]:
-        shapes['corner'].append(poly)
-      else:
-        shapes['other'].append(poly)
-    
-    for shape_type, polys in shapes.items():
-      if polys:
-        print(f"\n{shape_type}: {len(polys)} polycube(s)")
-        for i, poly in enumerate(polys, 1):
-          print(f" {shape_type} #{i}:")
-          self.visualize_polycube(poly)
-  
-  def _is_T_shape(self, cubes: List[Tuple[int, int, int]]) -> bool:
-    """Check if a tetracube forms a T shape."""
-    # A T-shape has one cube that connects to 3 others
-    connectivity = {}
-    for cube in cubes:
-      connectivity[cube] = 0
-      for other in cubes:
-        if cube != other:
-          # Check if adjacent
-          diff = sum(abs(a - b) for a, b in zip(cube, other))
-          if diff == 1:
-            connectivity[cube] += 1
-    
-    # T-shape has one cube with 3 connections
-    return 3 in connectivity.values()
+
+      print(f" Dimensions: {x_range}×{y_range}×{z_range}")
+      print(f" Cubes: {cubes}")
 
 
 def main():
