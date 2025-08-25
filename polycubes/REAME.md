@@ -60,5 +60,27 @@ PYTHONPATH=. python3 ai_benchmark/chat_gpt_4_version.py
 [INFO] root::print_time  : 11 secs
 [INFO] root::main  size=8, count=6922
 [INFO] root::print_time  : 86 secs
+
+PYTHONPATH=. python ai_benchmark/chat_gpt_5_thinking.py
+[INFO] root::main  size=1, count=1
+[INFO] root::print_time  : 0 secs
+[INFO] root::main  size=2, count=1
+[INFO] root::print_time  : 0 secs
+[INFO] root::main  size=3, count=2
+[INFO] root::print_time  : 0 secs
+[INFO] root::main  size=4, count=8
+[INFO] root::print_time  : 0 secs
+[INFO] root::main  size=5, count=29
+[INFO] root::print_time  : 0 secs
+[INFO] root::main  size=6, count=166
+[INFO] root::print_time  : 0 secs
+[INFO] root::main  size=7, count=1023
+[INFO] root::print_time  : 0 secs
+[INFO] root::main  size=8, count=6922
+[INFO] root::print_time  : 1 secs / 3 secs
+[INFO] root::main  size=9, count=48311
+[INFO] root::print_time  : 9 secs / 22 secs
+[INFO] root::main  size=10, count=346543
+[INFO] root::print_time  : 79 secs
 ```
 
