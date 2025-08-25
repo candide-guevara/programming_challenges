@@ -13,103 +13,101 @@ from utils.common import *
 #
 # Result Attempt1: results are wrong
 #
+# Attempt2:
+# The program is not calculating the correct number of polycubes. Here is the output it produced:
+#
+# n=1:      1 (Expected:      1) ✓
+# n=2:      1 (Expected:      1) ✓
+# n=3:      2 (Expected:      2) ✓
+# n=4:      7 (Expected:      8) ✗
+# n=5:     23 (Expected:     29) ✗
+# n=6:    112 (Expected:    166) ✗
+#
+# Can you fix the program?
+#
+# Result Attempt2: results are wrong
 
 class PolycubeCounter:
   def __init__(self):
     # Define all 24 rotation matrices (rotation group of the cube)
-    self.rotations = self._generate_rotation_matrices()
+    self.rotations = self._generate_all_rotations()
   
-  def _generate_rotation_matrices(self):
-    """Generate all 24 rotation matrices for a cube."""
+  def _generate_all_rotations(self):
+    """
+    Generate all 24 rotation matrices for a cube.
+    These represent all possible orientations of a cube in 3D space.
+    """
+    # Explicitly list all 24 rotation matrices
+    # These are the symmetry group of the cube
     rotations = []
     
-    # Identity and rotations around x-axis
-    for i in range(4):
-      angle = i * np.pi / 2
-      rot = np.array([
-        [1, 0, 0],
-        [0, np.cos(angle), -np.sin(angle)],
-        [0, np.sin(angle), np.cos(angle)]
-      ], dtype=np.int32)
-      rotations.append(np.round(rot).astype(np.int32))
+    # Identity
+    rotations.append(np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]))
     
-    # Rotations around y-axis (90 and 270 degrees)
-    for i in [1, 3]:
-      angle = i * np.pi / 2
-      rot = np.array([
-        [np.cos(angle), 0, np.sin(angle)],
-        [0, 1, 0],
-        [-np.sin(angle), 0, np.cos(angle)]
-      ], dtype=np.int32)
-      rotations.append(np.round(rot).astype(np.int32))
+    # Rotations around z-axis (90, 180, 270 degrees)
+    rotations.append(np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]]))
+    rotations.append(np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]))
+    rotations.append(np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]]))
     
-    # Rotations around z-axis combined with other orientations
-    for face in range(6):
-      if face < 4: # Already covered
-        continue
-      base_rot = rotations[face]
-      for i in range(4):
-        angle = i * np.pi / 2
-        z_rot = np.array([
-          [np.cos(angle), -np.sin(angle), 0],
-          [np.sin(angle), np.cos(angle), 0],
-          [0, 0, 1]
-        ], dtype=np.int32)
-        combined = np.round(z_rot @ base_rot).astype(np.int32)
-        rotations.append(combined)
+    # Rotations around x-axis (90, 180, 270 degrees)
+    rotations.append(np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]]))
+    rotations.append(np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]]))
+    rotations.append(np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]]))
     
-    # Complete the 24 rotations
-    all_rotations = []
-    bases = [
-      np.eye(3, dtype=np.int32), # identity
-      np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]], dtype=np.int32), # 90° around y
-      np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], dtype=np.int32), # 180° around y
-      np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]], dtype=np.int32), # 270° around y
-      np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.int32), # 90° around x
-      np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], dtype=np.int32), # 270° around x
-    ]
+    # Rotations around y-axis (90, 180, 270 degrees)
+    rotations.append(np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]]))
+    rotations.append(np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]]))
+    rotations.append(np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]]))
     
-    for base in bases:
-      for i in range(4):
-        angle = i * np.pi / 2
-        z_rot = np.array([
-          [np.cos(angle), -np.sin(angle), 0],
-          [np.sin(angle), np.cos(angle), 0],
-          [0, 0, 1]
-        ], dtype=np.int32)
-        all_rotations.append(np.round(base @ z_rot).astype(np.int32))
+    # Face rotations (cube on corner - 120 degree rotations)
+    rotations.append(np.array([[0, 0, 1], [1, 0, 0], [0, 1, 0]]))
+    rotations.append(np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]]))
+    rotations.append(np.array([[0, -1, 0], [0, 0, 1], [-1, 0, 0]]))
+    rotations.append(np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]]))
     
-    return all_rotations[:24] # Take first 24 unique rotations
+    # Edge rotations (180 degree rotations around edge diagonals)
+    rotations.append(np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]]))
+    rotations.append(np.array([[0, -1, 0], [-1, 0, 0], [0, 0, -1]]))
+    rotations.append(np.array([[-1, 0, 0], [0, 0, 1], [0, 1, 0]]))
+    rotations.append(np.array([[-1, 0, 0], [0, 0, -1], [0, -1, 0]]))
+    rotations.append(np.array([[0, 0, 1], [0, -1, 0], [1, 0, 0]]))
+    rotations.append(np.array([[0, 0, -1], [0, -1, 0], [-1, 0, 0]]))
+    
+    # More combined rotations to complete the 24
+    rotations.append(np.array([[0, 0, -1], [1, 0, 0], [0, -1, 0]]))
+    rotations.append(np.array([[0, -1, 0], [0, 0, -1], [1, 0, 0]]))
+    rotations.append(np.array([[0, 1, 0], [0, 0, -1], [-1, 0, 0]]))
+    rotations.append(np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]]))
+    
+    return rotations
   
-  def _normalize_polycube(self, cubes: np.ndarray) -> Tuple[Tuple[int, ...], ...]:
+  def _normalize_polycube(self, cubes: List[Tuple[int, int, int]]) -> Tuple[Tuple[int, ...], ...]:
     """
     Convert a polycube to its canonical form by trying all rotations
     and reflections, then selecting the lexicographically smallest.
     """
-    cubes = np.array(cubes)
+    cubes_array = np.array(cubes)
     min_repr = None
     
-    # Try all rotations
+    # Try all 24 rotations
     for rot_matrix in self.rotations:
-      rotated = cubes @ rot_matrix.T
+      rotated = cubes_array @ rot_matrix.T
       
-      # Try both without and with reflection
-      for reflect in [False, True]:
-        if reflect:
-          test_cubes = rotated.copy()
-          test_cubes[:, 0] *= -1 # Reflect along x-axis
-        else:
-          test_cubes = rotated
+      # Also try with reflection (48 total orientations)
+      for reflect_multiplier in [1, -1]:
+        test_cubes = rotated.copy()
+        test_cubes[:, 0] *= reflect_multiplier
         
-        # Translate to origin (minimum at 0,0,0)
+        # Translate so minimum coordinates are at origin
         test_cubes -= test_cubes.min(axis=0)
         
-        # Sort cubes to get canonical ordering
-        sorted_cubes = test_cubes[np.lexsort((test_cubes[:, 2], 
-                           test_cubes[:, 1], 
-                           test_cubes[:, 0]))]
+        # Sort cubes lexicographically
+        sorted_indices = np.lexsort((test_cubes[:, 2], 
+                      test_cubes[:, 1], 
+                      test_cubes[:, 0]))
+        sorted_cubes = test_cubes[sorted_indices]
         
-        # Convert to tuple for comparison
+        # Convert to tuple representation
         repr_tuple = tuple(map(tuple, sorted_cubes))
         
         if min_repr is None or repr_tuple < min_repr:
@@ -177,7 +175,7 @@ class PolycubeCounter:
     if max_n == 1:
       return counts
     
-    # Current set of polycubes
+    # Current set of polycubes (start with single cube)
     current = {((0, 0, 0),)}
     
     for n in range(2, max_n + 1):
@@ -207,6 +205,36 @@ class PolycubeCounter:
       is_ok(n, counts[-1])
     
     return counts
+  
+  def visualize_polycube(self, polycube: List[Tuple[int, int, int]]):
+    """
+    Simple ASCII visualization of a polycube (for debugging).
+    Shows layer-by-layer view.
+    """
+    if not polycube:
+      return
+    
+    cubes = np.array(polycube)
+    min_coords = cubes.min(axis=0)
+    max_coords = cubes.max(axis=0)
+    
+    print("\nPolycube visualization (layer by layer):")
+    for z in range(min_coords[2], max_coords[2] + 1):
+      print(f"Layer z={z}:")
+      layer = cubes[cubes[:, 2] == z]
+      if len(layer) == 0:
+        print(" (empty)")
+        continue
+      
+      for y in range(max_coords[1], min_coords[1] - 1, -1):
+        row = ""
+        for x in range(min_coords[0], max_coords[0] + 1):
+          if any((cube[0] == x and cube[1] == y) for cube in layer):
+            row += "■ "
+          else:
+            row += "· "
+        print(" " + row)
+      print()
 
 
 def main():
