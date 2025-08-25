@@ -13,66 +13,111 @@ from utils.common import *
 # Can you write a python program to count the number of possible 3D polycubes for any number of individual cubes? Use numpy to make the counting as fast as possible.
 #
 # Result Attempt1: results are wrong
+#
+# Attempt2:
+# Looks like the program is overcounting the number of distinct one-sided polycubes. Here is the output it produced:
+#
+# One-sided polycubes of size 1: 1
+# One-sided polycubes of size 2: 3
+# One-sided polycubes of size 3: 15
+# One-sided polycubes of size 4: 86
+# One-sided polycubes of size 5: 534
+# One-sided polycubes of size 6: 3481
+#
+# Rewrite the program to produce correct results.
+#
+# Result Attempt2: results are correct (almost as fast as hand written version)
 
-# Generate 24 rotation matrices for the cube (ignoring reflections)
+# 6-neighborhood steps
+NEIGHBORS = [(1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)]
+
+
 def rotation_matrices():
-    mats = []
-    axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
-    # Rotations from coordinate permutations and sign flips with determinant=1
-    for perm in product([0,1,2], repeat=3):
-        if len(set(perm))<3: continue
-        base = np.stack([axes[i] for i in perm], axis=1)
-        for signs in product([-1,1], repeat=3):
-            mat = base * signs
-            if round(np.linalg.det(mat)) == 1:
-                mats.append(mat)
-    return mats
+  """Return the 24 proper (det=+1) lattice rotation matrices for a cube.
+
+  Each matrix M is an integer 3x3 with orthonormal columns and det(M)=+1,
+  mapping Z^3 -> Z^3 and representing a rotation (no reflections).
+  """
+  mats = []
+  seen = set()
+  I = np.eye(3, dtype=int)
+  for perm in permutations(range(3)):
+    P = I[:, list(perm)]        # permute columns (axes)
+    for signs in product([-1, 1], repeat=3):
+      S = np.diag(signs)
+      M = P @ S            # sign flips on axes (columns)
+      # keep only proper rotations (det = +1)
+      if int(round(np.linalg.det(M))) == 1:
+        key = tuple(M.flatten().tolist())
+        if key not in seen:
+          seen.add(key)
+          mats.append(M)
+  assert len(mats) == 24, f"Expected 24 rotations, got {len(mats)}"
+  return mats
+
 
 ROTATIONS = rotation_matrices()
 
-# Apply rotation to all coordinates
-def rotate(shape, mat):
-    arr = np.array(list(shape))
-    rotated = arr @ mat
-    rotated = rotated.astype(int)
-    # translate so min corner is at origin
-    mins = rotated.min(axis=0)
-    normalized = rotated - mins
-    return frozenset(map(tuple, normalized))
 
-# Get canonical form (smallest lexicographic representative across rotations)
-def canonical(shape):
-    forms = [rotate(shape, R) for R in ROTATIONS]
-    return min(forms)
+def _normalize_coords(arr: np.ndarray) -> tuple:
+  """Translate coords so the minimum xyz is at the origin and return a sorted tuple."""
+  mins = arr.min(axis=0)
+  shifted = arr - mins
+  coords = sorted(map(tuple, shifted.tolist()))
+  return tuple(coords)
 
-# Expand a shape by adding one adjacent cube
-def expand(shape):
-    result = []
-    for (x,y,z) in shape:
-        for dx,dy,dz in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]:
-            new_cube = (x+dx, y+dy, z+dz)
-            if new_cube not in shape:
-                new_shape = set(shape)
-                new_shape.add(new_cube)
-                result.append(frozenset(new_shape))
-    return result
 
-# Generate all one-sided polycubes of size n
-def polycubes(n):
-    shapes = {frozenset([(0,0,0)])}
-    for size in range(2, n+1):
-        next_shapes = set()
-        for shape in shapes:
-            for new_shape in expand(shape):
-                next_shapes.add(canonical(new_shape))
-        shapes = next_shapes
-    return shapes
+def canonical(shape_set) -> tuple:
+  """Canonical (rotation-invariant) representation as a tuple of sorted coords.
+
+  Input: an iterable of (x,y,z) integer triples.
+  Output: the lexicographically smallest normalized coordinate tuple across the 24 rotations.
+  """
+  arr = np.array(list(shape_set), dtype=int)
+  reps = []
+  for R in ROTATIONS:
+    rot = arr @ R
+    reps.append(_normalize_coords(rot))
+  return min(reps)
+
+
+def expand(shape_tuple):
+  """Yield new shapes (as Python sets of coords) formed by adding one cube to the frontier."""
+  s = set(shape_tuple)
+  frontier = set()
+  for (x, y, z) in s:
+    for dx, dy, dz in NEIGHBORS:
+      nb = (x + dx, y + dy, z + dz)
+      if nb not in s:
+        frontier.add(nb)
+  for nb in frontier:
+    new_s = set(s)
+    new_s.add(nb)
+    yield new_s
+
+
+def one_sided_polycubes(n: int):
+  """Return the set of canonical one-sided polycubes of size n."""
+  if n < 1:
+    return set()
+  shapes = {((0, 0, 0),)} # canonical tuple for a single cube
+  for size in range(2, n + 1):
+    next_shapes = set()
+    for shape in shapes:
+      for new_shape in expand(shape):
+        next_shapes.add(canonical(new_shape))
+    shapes = next_shapes
+  return shapes
+
+
+def count_one_sided(n: int) -> int:
+  return len(one_sided_polycubes(n))
 
 
 def main():
   for size in range(1, MAX_SIZE):
     with print_time(""):
-      count = len(polycubes(size))
+      count = count_one_sided(size)
       logging.info("size=%d, count=%d", size, count)
       is_ok(size, count)
   logging.warning("DONE")
